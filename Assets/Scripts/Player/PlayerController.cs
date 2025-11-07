@@ -79,17 +79,66 @@ namespace ThiefSimulator.Player
             Vector2Int mapOrigin = InputManager.Instance.mapOrigin;
             Vector2Int absolutePos = receivedRelativePos + mapOrigin;
 
+            // Get dynamic obstacles (other NPCs) from NPCManager
+            HashSet<Vector2Int> dynamicObstacles = NPCManager.Instance != null ? NPCManager.Instance.GetAllNPCPositions() : new HashSet<Vector2Int>();
+
+            // Check if the clicked tile is a door
+            Door clickedDoor = null;
+            bool isDoor = DoorManager.Instance != null && DoorManager.Instance.IsDoorAt(receivedRelativePos, out clickedDoor);
+
+            Vector2Int finalTargetPos = receivedRelativePos;
+            HashSet<Vector2Int> pathfindingTemporarilyWalkableDoors = null;
+
+            if (isDoor && clickedDoor != null && !clickedDoor.IsOpen)
+            {
+                // If it's a closed door, we want to pathfind to the tile *before* the door.
+                // Temporarily treat the door as walkable to find a path *through* it.
+                pathfindingTemporarilyWalkableDoors = new HashSet<Vector2Int> { clickedDoor.Position };
+
+                // Find a path to the door's position, assuming it's temporarily walkable
+                var pathThroughDoor = Pathfinder.FindPath(
+                    _playerData.CurrentTilePosition,
+                    clickedDoor.Position,
+                    _obstacleTilemap,
+                    mapOrigin,
+                    dynamicObstacles,
+                    pathfindingTemporarilyWalkableDoors
+                );
+
+                if (pathThroughDoor != null && pathThroughDoor.Count > 0)
+                {
+                    // The target is the tile *before* the door in the path.
+                    // If the path is just the door itself, it means we are already adjacent or on the door.
+                    if (pathThroughDoor.Count > 1)
+                    {
+                        finalTargetPos = pathThroughDoor[pathThroughDoor.Count - 2]; // Second to last tile
+                    }
+                    else // Player is already adjacent to the door, no further movement needed towards the door itself.
+                    {
+                        finalTargetPos = _playerData.CurrentTilePosition; // Stay at current position
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"[PlayerController] Cannot find path to closed door at {clickedDoor.Position} even when temporarily walkable.");
+                    return; // Cannot reach the door even if it's temporarily walkable
+                }
+            }
+            else if (!isDoor)
+            {
+                // If it's not a door, or it's an open door, check if the target is walkable.
+                // If the target itself is not walkable, try to find a valid neighbor.
+                finalTargetPos = FindValidTargetPosition(receivedRelativePos, mapOrigin, dynamicObstacles);
+            }
+            // If it's an open door, finalTargetPos remains receivedRelativePos, and pathfindingTemporarilyWalkableDoors is null.
+
             bool isValidTarget = _floorTilemap.HasTile((Vector3Int)absolutePos) ||
                                  (_furnitureTilemap != null && _furnitureTilemap.HasTile((Vector3Int)absolutePos)) ||
                                  (_doorTilemap != null && _doorTilemap.HasTile((Vector3Int)absolutePos));
 
-            if (!isValidTarget) { return; }
+            if (!isValidTarget && !isDoor) { return; } // Only return if not a door and not a valid tile type.
 
-            // Get dynamic obstacles (other NPCs) from NPCManager
-            HashSet<Vector2Int> dynamicObstacles = NPCManager.Instance != null ? NPCManager.Instance.GetAllNPCPositions() : new HashSet<Vector2Int>();
-
-            Vector2Int finalTargetPos = FindValidTargetPosition(receivedRelativePos, mapOrigin, dynamicObstacles);
-            var path = Pathfinder.FindPath(_playerData.CurrentTilePosition, finalTargetPos, _obstacleTilemap, mapOrigin, dynamicObstacles);
+            var path = Pathfinder.FindPath(_playerData.CurrentTilePosition, finalTargetPos, _obstacleTilemap, mapOrigin, dynamicObstacles, pathfindingTemporarilyWalkableDoors);
 
             if (path != null && path.Count > 0)
             {

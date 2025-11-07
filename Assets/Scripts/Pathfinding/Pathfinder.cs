@@ -19,7 +19,7 @@ namespace ThiefSimulator.Pathfinding
             public Node(Vector2Int position) { this.position = position; }
         }
 
-        public static List<Vector2Int> FindPath(Vector2Int startPosition, Vector2Int targetPosition, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles)
+        public static List<Vector2Int> FindPath(Vector2Int startPosition, Vector2Int targetPosition, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors = null)
         {
             Node startNode = new Node(startPosition);
             Node targetNode = new Node(targetPosition);
@@ -55,7 +55,7 @@ namespace ThiefSimulator.Pathfinding
                     return RetracePath(startNode, currentNode);
                 }
 
-                foreach (Vector2Int neighborPos in GetNeighborPositions(currentNode, obstacleTilemap, mapOrigin, dynamicObstacles))
+                foreach (Vector2Int neighborPos in GetNeighborPositions(currentNode, obstacleTilemap, mapOrigin, dynamicObstacles, temporarilyWalkableDoors))
                 {
                     if (closedSet.Contains(neighborPos))
                     {
@@ -104,7 +104,7 @@ namespace ThiefSimulator.Pathfinding
             return path;
         }
 
-        public static bool IsWalkable(Vector2Int relativePos, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles)
+        public static bool IsWalkable(Vector2Int relativePos, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors = null)
         {
             // 1. Check for dynamic obstacles (other NPCs)
             if (dynamicObstacles != null && dynamicObstacles.Contains(relativePos))
@@ -122,7 +122,12 @@ namespace ThiefSimulator.Pathfinding
             // 3. Check for dynamic obstacles (doors)
             if (DoorManager.Instance != null && DoorManager.Instance.IsDoorAt(relativePos, out Door door))
             {
-                // A door exists here. It's walkable only if it's open.
+                // If this door is temporarily walkable, treat it as such.
+                if (temporarilyWalkableDoors != null && temporarilyWalkableDoors.Contains(relativePos))
+                {
+                    return true;
+                }
+                // Otherwise, a door exists here. It's walkable only if it's open.
                 return door.IsOpen;
             }
 
@@ -130,7 +135,7 @@ namespace ThiefSimulator.Pathfinding
             return true;
         }
 
-        private static IEnumerable<Vector2Int> GetNeighborPositions(Node node, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles)
+        private static IEnumerable<Vector2Int> GetNeighborPositions(Node node, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors)
         {
             Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
 
@@ -138,7 +143,7 @@ namespace ThiefSimulator.Pathfinding
             {
                 Vector2Int relativeNeighborPos = node.position + dir;
                 
-                if (IsWalkable(relativeNeighborPos, obstacleTilemap, mapOrigin, dynamicObstacles))
+                if (IsWalkable(relativeNeighborPos, obstacleTilemap, mapOrigin, dynamicObstacles, temporarilyWalkableDoors))
                 {
                     yield return relativeNeighborPos;
                 }
