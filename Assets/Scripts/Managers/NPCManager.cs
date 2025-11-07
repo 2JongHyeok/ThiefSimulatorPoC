@@ -1,9 +1,11 @@
+using System.Collections;
 using System.Collections.Generic;
 using ThiefSimulator.NPC;
 using UnityEngine;
 
 namespace ThiefSimulator.Managers
 {
+    [DefaultExecutionOrder(-200)]
     public class NPCManager : MonoBehaviour
     {
         public static NPCManager Instance { get; private set; }
@@ -15,6 +17,8 @@ namespace ThiefSimulator.Managers
         private List<NPCController> _allNPCs;
         private Dictionary<Vector2Int, NPCController> _npcPositionLookup;
         private int _lastCheckedHour = -1;
+        private int _lastProcessedAbsoluteMinute = -1;
+        private Coroutine _subscriptionRoutine;
 
         private void Awake()
         {
@@ -24,21 +28,14 @@ namespace ThiefSimulator.Managers
                 return;
             }
             Instance = this;
-
+            Debug.Log("[NPCManager] Awake called.");
             _allNPCs = new List<NPCController>();
             _npcPositionLookup = new Dictionary<Vector2Int, NPCController>();
         }
 
         private void OnEnable()
         {
-            if (TimeManager.Instance != null)
-            {
-                TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
-            }
-            else
-            {
-                Debug.LogError("[NPCManager] TimeManager.Instance is null at OnEnable. Make sure TimeManager loads before NPCManager.");
-            }
+            TrySubscribeToTimeManager();
         }
 
         private void OnDisable()
@@ -47,6 +44,46 @@ namespace ThiefSimulator.Managers
             {
                 TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
             }
+            if (_subscriptionRoutine != null)
+            {
+                StopCoroutine(_subscriptionRoutine);
+                _subscriptionRoutine = null;
+            }
+        }
+
+        private void TrySubscribeToTimeManager()
+        {
+            if (TimeManager.Instance != null)
+            {
+                TimeManager.Instance.OnTimeChanged -= HandleTimeChanged;
+                TimeManager.Instance.OnTimeChanged += HandleTimeChanged;
+                if (_subscriptionRoutine != null)
+                {
+                    StopCoroutine(_subscriptionRoutine);
+                    _subscriptionRoutine = null;
+                }
+
+                var (hour, minute) = TimeManager.Instance.GetCurrentTime();
+                _lastCheckedHour = hour;
+                _lastProcessedAbsoluteMinute = hour * 60 + minute;
+                Debug.Log($"[NPCManager] Subscribed to TimeManager. Baseline time set to {hour:D2}:{minute:D2}.");
+                UpdateAllNPCSchedules(hour, minute);
+            }
+            else if (_subscriptionRoutine == null)
+            {
+                _subscriptionRoutine = StartCoroutine(WaitForTimeManager());
+            }
+        }
+
+        private IEnumerator WaitForTimeManager()
+        {
+            Debug.Log("[NPCManager] Waiting for TimeManager to initialize...");
+            while (TimeManager.Instance == null)
+            {
+                yield return null;
+            }
+            _subscriptionRoutine = null;
+            TrySubscribeToTimeManager();
         }
 
         /// <summary>
@@ -69,6 +106,12 @@ namespace ThiefSimulator.Managers
             else
             {
                 _npcPositionLookup.Add(position, npc);
+            }
+
+            if (TimeManager.Instance != null)
+            {
+                var (hour, minute) = TimeManager.Instance.GetCurrentTime();
+                npc.UpdateSchedule(hour, minute);
             }
         }
 
@@ -109,20 +152,62 @@ namespace ThiefSimulator.Managers
         }
 
         /// <summary>
-        /// Handles hourly updates for NPC schedules.
+        /// Handles time changes broadcast by the TimeManager.
         /// </summary>
         private void HandleTimeChanged(int hour, int minute)
         {
-            if (hour == _lastCheckedHour) return; // Only trigger on hour change
+            if (_lastProcessedAbsoluteMinute < 0)
+            {
+                _lastProcessedAbsoluteMinute = hour * 60 + minute;
+                return;
+            }
 
-            _lastCheckedHour = hour;
+            int previousModulo = _lastProcessedAbsoluteMinute % (24 * 60);
+            int currentModulo = (hour * 60) + minute;
+            int deltaMinutes = currentModulo - previousModulo;
+            if (deltaMinutes < 0)
+            {
+                deltaMinutes += 24 * 60;
+            }
 
+            if (deltaMinutes == 0)
+            {
+                return;
+            }
+
+            for (int step = 1; step <= deltaMinutes; step++)
+            {
+                int absoluteMinute = _lastProcessedAbsoluteMinute + step;
+                int processedHour = (absoluteMinute / 60) % 24;
+                int processedMinute = absoluteMinute % 60;
+
+                if (processedHour != _lastCheckedHour)
+                {
+                    _lastCheckedHour = processedHour;
+                    UpdateAllNPCSchedules(processedHour, processedMinute);
+                    Debug.Log($"[NPCManager] Hour changed to {processedHour:D2}:00. Commanding all NPCs to update their schedules.");
+                }
+
+                TickAllNPCs(processedHour, processedMinute);
+            }
+
+            _lastProcessedAbsoluteMinute += deltaMinutes;
+        }
+
+        private void UpdateAllNPCSchedules(int hour, int minute)
+        {
             foreach (NPCController npc in _allNPCs)
             {
                 npc.UpdateSchedule(hour, minute);
             }
+        }
 
-            Debug.Log($"[NPCManager] Hour changed to {hour:D2}:00. Commanding all NPCs to update their schedules.");
+        private void TickAllNPCs(int hour, int minute)
+        {
+            foreach (NPCController npc in _allNPCs)
+            {
+                npc.TickMinute(hour, minute);
+            }
         }
 
         /// <summary>

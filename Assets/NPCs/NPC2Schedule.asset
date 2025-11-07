@@ -13,15 +13,15 @@ MonoBehaviour:
   m_Name: NPC2Schedule
   m_EditorClassIdentifier: 
   hourlyTargetAreas:
-  - {x: 6, y: 16}
-  - {x: 8, y: 16}
-  - {x: 10, y: 16}
-  - {x: 3, y: 7}
-  - {x: 6, y: 16}
-  - {x: 3, y: 7}
-  - {x: 6, y: 16}
-  - {x: 3, y: 7}
-  - {x: 6, y: 16}
-  - {x: 3, y: 7}
-  - {x: 6, y: 16}
-  - {x: 3, y: 7}
+  - {x: 19, y: 5}
+  - {x: 19, y: 12}
+  - {x: 19, y: 20}
+  - {x: 19, y: 5}
+  - {x: 19, y: 12}
+  - {x: 19, y: 20}
+  - {x: 19, y: 5}
+  - {x: 19, y: 12}
+  - {x: 19, y: 20}
+  - {x: 19, y: 5}
+  - {x: 19, y: 20}
+  - {x: 19, y: 5}

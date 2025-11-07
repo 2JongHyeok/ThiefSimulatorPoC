@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using ThiefSimulator.Input;
 using ThiefSimulator.Managers;
@@ -8,10 +7,14 @@ using UnityEngine.Tilemaps;
 
 namespace ThiefSimulator.NPC
 {
+    /// <summary>
+    /// Orchestrates NPC schedules and per-minute movement.
+    /// </summary>
     [RequireComponent(typeof(NPCData), typeof(NPCMovement))]
     public class NPCController : MonoBehaviour
     {
         private enum NPCState { Idle, Busy, Patrolling }
+        private enum MoveIntent { None, ToPatrolCenter, PatrolPoint, Custom }
 
         [Header("Schedule")]
         [SerializeField] private NPCSchedule _npcSchedule;
@@ -22,42 +25,62 @@ namespace ThiefSimulator.NPC
         [SerializeField] private Grid _grid;
 
         [Header("Patrol Settings")]
-        [SerializeField] private float _patrolInterval = 2f; // Time NPC waits at a patrol point
-        
+        [Tooltip("How many in-game minutes the NPC waits before picking the next patrol point.")]
+        [SerializeField] private int _patrolIntervalMinutes = 1;
+
         private NPCData _npcData;
         private NPCMovement _npcMovement;
         private NPCState _currentState = NPCState.Idle;
-        private Coroutine _patrolCoroutine;
+        private MoveIntent _currentMoveIntent = MoveIntent.None;
+        private Queue<Vector2Int> _currentPath = new Queue<Vector2Int>();
+        private Vector2Int _currentPatrolCenter;
+        private int _patrolCooldown;
 
         private void Awake()
         {
+            Debug.Log($"[NPCController] {name} Awake called.");
             _npcData = GetComponent<NPCData>();
             _npcMovement = GetComponent<NPCMovement>();
             if (_obstacleTilemap == null) { Debug.LogError("[NPCController] Obstacle Tilemap is not assigned!"); }
             if (_grid == null) { Debug.LogError("[NPCController] Grid is not assigned!"); }
-            // Register with NPCManager
+
+            InitializeTilePosition();
+
             if (NPCManager.Instance != null)
             {
                 NPCManager.Instance.RegisterNPC(this, _npcData.CurrentTilePosition);
             }
         }
 
-        private void OnEnable()
+        private void Start()
         {
-            _npcMovement.OnMovementFinished += OnMovementFinished;
-        }
-
-        private void OnDisable()
-        {
-            _npcMovement.OnMovementFinished -= OnMovementFinished;
+            Vector2Int oldPosition = _npcData.CurrentTilePosition;
+            InitializeTilePosition();
+            if (NPCManager.Instance != null)
+            {
+                NPCManager.Instance.UpdateNPCPosition(this, oldPosition, _npcData.CurrentTilePosition);
+            }
         }
 
         private void OnDestroy()
         {
-            // Unregister from NPCManager
             if (NPCManager.Instance != null)
             {
                 NPCManager.Instance.UnregisterNPC(this, _npcData.CurrentTilePosition);
+            }
+        }
+
+        private void InitializeTilePosition()
+        {
+            if (_grid == null || InputManager.Instance == null) { return; }
+
+            Vector3Int cellPosition = _grid.WorldToCell(transform.position);
+            Vector2Int absolutePos = (Vector2Int)cellPosition;
+            Vector2Int relativePos = absolutePos - InputManager.Instance.mapOrigin;
+
+            if (_npcData.CurrentTilePosition != relativePos)
+            {
+                _npcData.SetTilePosition(relativePos);
             }
         }
 
@@ -70,8 +93,7 @@ namespace ThiefSimulator.NPC
         }
 
         /// <summary>
-        /// Commands the NPC to update its current schedule.
-        /// Called by NPCManager every hour.
+        /// Called by NPCManager whenever the game enters a new 2-hour block.
         /// </summary>
         public void UpdateSchedule(int currentHour, int currentMinute)
         {
@@ -80,153 +102,195 @@ namespace ThiefSimulator.NPC
                 Debug.LogWarning($"[NPCController] NPC {name} has no NPCSchedule assigned.");
                 return;
             }
-            
-            int blockIndex = currentHour / 2; // Get the index for the current 2-hour block
 
+            int blockIndex = currentHour / 2;
             if (blockIndex >= _npcSchedule.hourlyTargetAreas.Count)
             {
-                Debug.LogWarning($"[NPCController] Schedule not defined for hour block {currentHour:D2}:00. Block index {blockIndex} out of bounds for NPC {name}.");
-                return; // No schedule for this block
+                Debug.LogWarning($"[NPCController] Schedule not defined for hour block {currentHour:D2}:00.");
+                return;
             }
 
-            Vector2Int targetArea = _npcSchedule.hourlyTargetAreas[blockIndex];
-            
-            Debug.Log($"[NPCController] {name} received new schedule for {currentHour:D2}:00 block. Target Area: {targetArea}");
-            StartPatrol(targetArea, _patrolRadius);
+            _currentPatrolCenter = _npcSchedule.hourlyTargetAreas[blockIndex];
+            Debug.Log($"[NPCController] {name} received new patrol center {_currentPatrolCenter} for hour {currentHour:D2}.");
+
+            if (_npcData.CurrentTilePosition == _currentPatrolCenter)
+            {
+                EnterPatrolState();
+                return;
+            }
+
+            TryAssignPathTo(_currentPatrolCenter, MoveIntent.ToPatrolCenter);
         }
 
-        public void StartPatrol(Vector2Int center, int radius)
+        /// <summary>
+        /// Called once per in-game minute to progress movement.
+        /// </summary>
+        public void TickMinute(int currentHour, int currentMinute)
         {
-            if (_currentState == NPCState.Busy || _currentState == NPCState.Patrolling)
+            if (_currentPath.Count > 0)
             {
-                Debug.LogWarning("[NPCController] NPC is already busy or patrolling, ignoring new patrol command.");
-                // If a patrol is active, stop it to accept new patrol command
-                if (_patrolCoroutine != null) StopCoroutine(_patrolCoroutine);
-                _currentState = NPCState.Idle; // Reset state to accept new command
+                Vector2Int nextTile = _currentPath.Dequeue();
+                _npcMovement.MoveOneStep(nextTile);
+
+                if (_currentPath.Count == 0)
+                {
+                    CompleteCurrentMoveIntent();
+                }
+                return;
             }
 
-            _currentState = NPCState.Busy; // Busy while moving to the center
-            _patrolCoroutine = StartCoroutine(PatrolRoutine(center, radius));
+            if (_currentState != NPCState.Patrolling)
+            {
+                return;
+            }
+
+            if (_patrolCooldown > 0)
+            {
+                _patrolCooldown--;
+                return;
+            }
+
+            QueueRandomPatrolDestination();
         }
 
-        private IEnumerator PatrolRoutine(Vector2Int center, int radius)
+        public void SetPath(List<Vector2Int> path)
         {
-            // First, move to the center of the patrol area
-            List<Vector2Int> pathToCenter = Pathfinder.FindPath(_npcData.CurrentTilePosition, center, _obstacleTilemap, InputManager.Instance.mapOrigin, NPCManager.Instance.GetAllNPCPositions());
-            if (pathToCenter != null && pathToCenter.Count > 0)
+            if (path == null || path.Count == 0)
             {
-                _npcMovement.StartMove(pathToCenter);
-                yield return new WaitUntil(() => _currentState == NPCState.Idle); // Wait for movement to finish
-            }
-            else
-            {
-                Debug.LogWarning($"[NPCController] Could not path to patrol center {center}. NPC will remain idle.");
-                _currentState = NPCState.Idle;
-                yield break;
+                Debug.LogWarning("[NPCController] Received empty path. Ignoring command.");
+                return;
             }
 
-            _currentState = NPCState.Patrolling; // Now patrolling within the area
-            Debug.Log($"[NPCController] Reached patrol center {center}. Starting patrol within radius {radius}.");
+            AssignPath(path, MoveIntent.Custom);
+        }
 
-            while (true) // Patrol indefinitely until a new command is given
+        public void PlaceNPC(Vector2Int relativePosition)
+        {
+            _npcData.SetTilePosition(relativePosition);
+            if (_grid != null && InputManager.Instance != null)
             {
-                Vector2Int randomPatrolPoint = GetRandomWalkablePointInRadius(center, radius);
-                if (randomPatrolPoint == _npcData.CurrentTilePosition) // Already there
-                {
-                    yield return new WaitForSeconds(_patrolInterval); // Wait before picking new point
-                    continue;
-                }
-
-                List<Vector2Int> pathToPatrolPoint = Pathfinder.FindPath(_npcData.CurrentTilePosition, randomPatrolPoint, _obstacleTilemap, InputManager.Instance.mapOrigin, NPCManager.Instance.GetAllNPCPositions());
-                if (pathToPatrolPoint != null && pathToPatrolPoint.Count > 0)
-                {
-                    _npcMovement.StartMove(pathToPatrolPoint);
-                    yield return new WaitUntil(() => _currentState == NPCState.Idle); // Wait for movement to finish
-                }
-                else
-                {
-                    Debug.LogWarning($"[NPCController] Could not path to random patrol point {randomPatrolPoint}. Picking another.");
-                    yield return new WaitForSeconds(0.5f); // Short wait to prevent busy loop
-                }
-
-                yield return new WaitForSeconds(_patrolInterval); // Wait before picking new point
+                Vector2Int absolutePos = relativePosition + InputManager.Instance.mapOrigin;
+                transform.position = _grid.GetCellCenterWorld((Vector3Int)absolutePos);
             }
+            Debug.Log($"[NPCController] NPC placed at {relativePosition}.");
+        }
+
+        private void QueueRandomPatrolDestination()
+        {
+            if (InputManager.Instance == null)
+            {
+                Debug.LogWarning("[NPCController] Cannot pick patrol destination. InputManager is missing.");
+                return;
+            }
+
+            Vector2Int randomPoint = GetRandomWalkablePointInRadius(_currentPatrolCenter, _patrolRadius);
+            if (randomPoint == _npcData.CurrentTilePosition)
+            {
+                _patrolCooldown = Mathf.Max(1, _patrolIntervalMinutes);
+                return;
+            }
+
+            if (!TryAssignPathTo(randomPoint, MoveIntent.PatrolPoint))
+            {
+                _patrolCooldown = 1;
+            }
+        }
+
+        private bool TryAssignPathTo(Vector2Int target, MoveIntent intent)
+        {
+            if (InputManager.Instance == null || NPCManager.Instance == null)
+            {
+                Debug.LogWarning("[NPCController] Cannot build path. InputManager or NPCManager is missing.");
+                return false;
+            }
+
+            List<Vector2Int> path = Pathfinder.FindPath(
+                _npcData.CurrentTilePosition,
+                target,
+                _obstacleTilemap,
+                InputManager.Instance.mapOrigin,
+                NPCManager.Instance.GetAllNPCPositions());
+
+            if (path == null)
+            {
+                Debug.LogWarning($"[NPCController] Pathfinding failed for {name} to {target}.");
+                return false;
+            }
+
+            if (path.Count == 0)
+            {
+                _currentMoveIntent = intent;
+                CompleteCurrentMoveIntent();
+                return true;
+            }
+
+            AssignPath(path, intent);
+            return true;
+        }
+
+        private void AssignPath(List<Vector2Int> path, MoveIntent intent)
+        {
+            _currentPath = new Queue<Vector2Int>(path);
+            _currentMoveIntent = intent;
+            _currentState = NPCState.Busy;
+        }
+
+        private void CompleteCurrentMoveIntent()
+        {
+            switch (_currentMoveIntent)
+            {
+                case MoveIntent.ToPatrolCenter:
+                    EnterPatrolState();
+                    break;
+                case MoveIntent.PatrolPoint:
+                    _currentState = NPCState.Patrolling;
+                    _patrolCooldown = Mathf.Max(1, _patrolIntervalMinutes);
+                    break;
+                default:
+                    _currentState = NPCState.Idle;
+                    break;
+            }
+
+            _currentMoveIntent = MoveIntent.None;
+        }
+
+        private void EnterPatrolState()
+        {
+            _currentState = NPCState.Patrolling;
+            _patrolCooldown = 0;
+            _currentMoveIntent = MoveIntent.None;
+            Debug.Log($"[NPCController] {name} is patrolling around {_currentPatrolCenter}.");
         }
 
         private Vector2Int GetRandomWalkablePointInRadius(Vector2Int center, int radius)
         {
-            Vector2Int randomPoint;
+            if (InputManager.Instance == null || NPCManager.Instance == null)
+            {
+                return center;
+            }
+
+            Vector2Int randomPoint = center;
             int attempts = 0;
             const int maxAttempts = 50;
 
-            do
+            while (attempts < maxAttempts)
             {
                 randomPoint = center + new Vector2Int(Random.Range(-radius, radius + 1), Random.Range(-radius, radius + 1));
                 attempts++;
-            } while (!Pathfinder.IsWalkable(randomPoint, _obstacleTilemap, InputManager.Instance.mapOrigin, NPCManager.Instance.GetAllNPCPositions()) && attempts < maxAttempts);
 
-            if (attempts >= maxAttempts)
-            {
-                Debug.LogWarning($"[NPCController] Failed to find a walkable patrol point near {center} within {radius} radius after {maxAttempts} attempts. Returning center.");
-                return center; // Fallback
+                if (Pathfinder.IsWalkable(randomPoint, _obstacleTilemap, InputManager.Instance.mapOrigin, NPCManager.Instance.GetAllNPCPositions()))
+                {
+                    return randomPoint;
+                }
             }
-            return randomPoint;
+
+            Debug.LogWarning($"[NPCController] Failed to find patrol point near {center}. Staying put.");
+            return center;
         }
 
-        /// <summary>
-        /// Sets a new path for the NPC to follow.
-        /// </summary>
-        /// <param name="path">The list of relative grid positions for the NPC to move along.</param>
-        public void SetPath(List<Vector2Int> path)
-        {
-            if (_currentState == NPCState.Busy || _currentState == NPCState.Patrolling)
-            {
-                Debug.LogWarning("[NPCController] NPC is busy or patrolling, ignoring new path command.");
-                // If a patrol is active, stop it to accept new path command
-                if (_patrolCoroutine != null) StopCoroutine(_patrolCoroutine);
-                _currentState = NPCState.Idle; // Reset state to accept new command
-            }
-
-            if (path == null || path.Count == 0)
-            {
-                Debug.LogWarning("[NPCController] Received empty path. NPC will remain idle.");
-                return;
-            }
-
-            _currentState = NPCState.Busy; // Busy while moving along the path
-            _npcMovement.StartMove(path);
-        }
-
-        /// <summary>
-        /// Called when the NPC finishes its movement.
-        /// </summary>
-        private void OnMovementFinished()
-        {
-            // If patrolling, it will pick a new point. Otherwise, it becomes idle.
-            if (_currentState != NPCState.Patrolling)
-            {
-                _currentState = NPCState.Idle;
-                Debug.Log("[NPCController] Movement finished. NPC is now idle.");
-            }
-            // If patrolling, the PatrolRoutine will continue and pick a new point.
-        }
-
-        /// <summary>
-        /// Sets the NPC to a specific position without movement animation.
-        /// Used for initial placement or teleportation.
-        /// </summary>
-        /// <param name="relativePosition">The relative grid position to place the NPC.</param>
-        public void PlaceNPC(Vector2Int relativePosition)
-        {
-            _npcData.SetTilePosition(relativePosition);
-            // Update visual position immediately
-            Grid grid = FindObjectOfType<Grid>(); // Temporarily using FindObjectOfType for initial placement
-            if (grid != null && InputManager.Instance != null)
-            {
-                Vector2Int absolutePos = relativePosition + InputManager.Instance.mapOrigin;
-                transform.position = grid.GetCellCenterWorld((Vector3Int)absolutePos);
-            }
-            Debug.Log($"[NPCController] NPC placed at {relativePosition}.");
-        }
+        // Usage in Unity:
+        // 1. Attach NPCController to each NPC along with NPCData and NPCMovement.
+        // 2. Assign NPCSchedule, obstacle Tilemap, Grid, and patrol parameters.
+        // 3. NPCManager.TickMinute will call TickMinute so NPCs move one tile per in-game minute.
     }
 }

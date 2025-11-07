@@ -1,17 +1,18 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using ThiefSimulator.Input;
-using ThiefSimulator.Managers;
 using UnityEngine;
 
 namespace ThiefSimulator.NPC
 {
+    /// <summary>
+    /// Handles tile-by-tile movement for NPCs. Movement is triggered externally per in-game minute.
+    /// </summary>
     [RequireComponent(typeof(NPCData), typeof(NPCController))]
     public class NPCMovement : MonoBehaviour
     {
         [Header("Settings")]
-        [Tooltip("How many seconds it takes for the NPC to move one tile.")]
+        [Tooltip("How many real-time seconds it takes to move one tile.")]
         [SerializeField] private float _secondsPerTile = 0.5f;
 
         [Header("Dependencies")]
@@ -20,70 +21,71 @@ namespace ThiefSimulator.NPC
         public event Action OnMovementFinished;
 
         private NPCData _npcData;
-        private NPCController _npcController; // Added
-        private bool _isMoving = false;
+        private NPCController _npcController;
+        private Coroutine _moveCoroutine;
 
         private void Awake()
         {
             _npcData = GetComponent<NPCData>();
-            _npcController = GetComponent<NPCController>(); // Added
+            _npcController = GetComponent<NPCController>();
             if (_grid == null) { Debug.LogError("[NPCMovement] Grid is not assigned in the inspector!"); }
         }
 
         /// <summary>
-        /// Starts the movement process along a given path.
+        /// Moves exactly one tile, using the same interpolation style as the Player.
         /// </summary>
-        /// <param name="path">A list of grid coordinates to move through.</param>
-        public void StartMove(List<Vector2Int> path)
+        public void MoveOneStep(Vector2Int targetRelativeTile)
         {
-            if (_isMoving) { return; }
-            if (path == null || path.Count == 0) { 
-                // If path is just one point, it means stand still at current position
-                if (path != null && path.Count == 1 && path[0] == _npcData.CurrentTilePosition)
-                {
-                    // Already at target, just finish movement
-                    OnMovementFinished?.Invoke();
-                    return;
-                }
-                Debug.LogWarning("[NPCMovement] Attempted to move with an empty path.");
-                OnMovementFinished?.Invoke(); // Signal finished even if no movement
+            if (InputManager.Instance == null || _grid == null)
+            {
+                Debug.LogWarning("[NPCMovement] Cannot move. Grid or InputManager is missing.");
                 return;
             }
 
-            StartCoroutine(MoveRoutine(path));
+            if (_moveCoroutine != null)
+            {
+                StopCoroutine(_moveCoroutine);
+            }
+            _moveCoroutine = StartCoroutine(MoveRoutine(targetRelativeTile));
         }
 
-        private IEnumerator MoveRoutine(List<Vector2Int> path)
+        private IEnumerator MoveRoutine(Vector2Int targetRelativeTile)
         {
-            _isMoving = true;
-            Vector2Int mapOrigin = InputManager.Instance.mapOrigin; // Assuming InputManager's mapOrigin is universal
+            Vector2Int mapOrigin = InputManager.Instance.mapOrigin;
+            Vector3 startWorldPos = transform.position;
+            Vector2Int absoluteTargetTile = targetRelativeTile + mapOrigin;
+            Vector3 targetWorldPos = _grid.GetCellCenterWorld((Vector3Int)absoluteTargetTile);
 
-            foreach (var relativeTargetTile in path)
+            float elapsedTime = 0f;
+            while (elapsedTime < _secondsPerTile)
             {
-                Vector2Int oldRelativePosition = _npcData.CurrentTilePosition; // Stored old position
-
-                Vector3 startWorldPos = transform.position;
-                Vector2Int absoluteTargetTile = relativeTargetTile + mapOrigin;
-                Vector3 targetWorldPos = _grid.GetCellCenterWorld((Vector3Int)absoluteTargetTile);
-
-                float elapsedTime = 0f;
-                while (elapsedTime < _secondsPerTile)
-                {
-                    transform.position = Vector3.Lerp(startWorldPos, targetWorldPos, elapsedTime / _secondsPerTile);
-                    elapsedTime += Time.deltaTime;
-                    yield return null;
-                }
-
-                // Snap to final position and update data
-                transform.position = targetWorldPos;
-                _npcData.SetTilePosition(relativeTargetTile);
-
-                // Notify manager of position change
-                _npcController.NotifyPositionChanged(oldRelativePosition, relativeTargetTile); // Added
+                transform.position = Vector3.Lerp(startWorldPos, targetWorldPos, elapsedTime / _secondsPerTile);
+                elapsedTime += Time.deltaTime;
+                yield return null;
             }
 
-            _isMoving = false;
+            transform.position = targetWorldPos;
+            Vector2Int oldRelative = _npcData.CurrentTilePosition;
+            _npcData.SetTilePosition(targetRelativeTile);
+            _npcController.NotifyPositionChanged(oldRelative, targetRelativeTile);
+
+            _moveCoroutine = null;
             OnMovementFinished?.Invoke();
         }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            if (_grid == null)
+            {
+                _grid = GetComponentInParent<Grid>();
+            }
+        }
+#endif
+
+        // Usage in Unity:
+        // 1. Attach to an NPC GameObject alongside NPCData and NPCController.
+        // 2. Assign the shared Grid reference and tweak Seconds Per Tile to match player feel.
+        // 3. Let NPCController call MoveOneStep when TimeManager advances minutes.
     }
 }
