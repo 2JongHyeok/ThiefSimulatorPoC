@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 using UnityEngine.InputSystem;
 
 namespace ThiefSimulator.Input
@@ -13,6 +14,7 @@ namespace ThiefSimulator.Input
         public Vector2Int mapOrigin;
 
         [SerializeField] private Grid _grid;
+        [SerializeField] public Tilemap _obstacleTilemap;
 
         public static event Action<Vector2Int> OnTileClicked;
 
@@ -51,7 +53,12 @@ namespace ThiefSimulator.Input
         private void OnDrawGizmosSelected()
         {
             // For the gizmo, we can use the assigned grid or try to find it for editor convenience.
-            Grid grid = _grid ?? FindObjectOfType<Grid>();
+            if (_grid == null)
+            {
+                Debug.LogError("[InputManager] Grid is not assigned in the Inspector. Please assign it.");
+                return;
+            }
+            Grid grid = _grid;
             if (grid == null) return;
             Vector3 originWorldPos = grid.GetCellCenterWorld((Vector3Int)mapOrigin);
             Gizmos.color = Color.yellow;

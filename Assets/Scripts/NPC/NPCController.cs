@@ -59,7 +59,7 @@ namespace ThiefSimulator.NPC
             if (_grid == null) { Debug.LogError("[NPCController] Grid is not assigned!"); }
             if (_playerData == null)
             {
-                _playerData = FindObjectOfType<PlayerData>();
+                Debug.LogError("[NPCController] PlayerData is not assigned in the Inspector. Please assign it.");
             }
 
             InitializeTilePosition();
@@ -318,11 +318,7 @@ namespace ThiefSimulator.NPC
 
         private void TryDetectPlayer()
         {
-            if (_playerData == null)
-            {
-                _playerData = FindObjectOfType<PlayerData>();
-                if (_playerData == null) { return; }
-            }
+            if (_playerData == null) { return; }
 
             if (PoliceManager.Instance == null) { return; }
             if (TimeManager.Instance == null) { return; }
@@ -462,10 +458,7 @@ namespace ThiefSimulator.NPC
 
         private void OnValidate()
         {
-            if (_grid == null)
-            {
-                _grid = FindObjectOfType<Grid>();
-            }
+            // _grid should be assigned in the Inspector.
             CreateDetectionOverlay();
             RefreshDetectionOverlay();
         }

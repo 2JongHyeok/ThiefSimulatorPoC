@@ -26,7 +26,7 @@ namespace ThiefSimulator.Police
             _data = GetComponent<PoliceOfficerData>();
             if (_grid == null)
             {
-                _grid = FindObjectOfType<Grid>();
+                Debug.LogError("[PoliceOfficerMovement] Grid is not assigned in the Inspector. Please assign it.");
             }
             if (_grid == null)
             {

@@ -33,7 +33,7 @@ namespace ThiefSimulator.Police
 
             if (_playerData == null)
             {
-                _playerData = FindObjectOfType<PlayerData>();
+                Debug.LogError("[PoliceManager] PlayerData is not assigned in the Inspector. Please assign it.");
             }
         }
 

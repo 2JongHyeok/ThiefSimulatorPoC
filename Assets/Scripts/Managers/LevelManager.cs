@@ -26,12 +26,7 @@ namespace ThiefSimulator.Managers
             }
             if (_grid == null)
             {
-                _grid = FindObjectOfType<Grid>();
-                if (_grid == null)
-                {
-                    Debug.LogError("[LevelManager] Grid is not assigned and could not be found!");
-                    return;
-                }
+                Debug.LogError("[LevelManager] Grid is not assigned in the Inspector. Please assign it.");
             }
 
             InitializePlayerPosition();

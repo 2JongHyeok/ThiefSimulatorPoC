@@ -74,8 +74,13 @@ namespace ThiefSimulator.Objects
 #if UNITY_EDITOR
         private void OnDrawGizmosSelected()
         {
-            Grid grid = _grid ?? FindObjectOfType<Grid>();
-            InputManager inputManager = FindObjectOfType<InputManager>();
+            if (_grid == null)
+            {
+                Debug.LogError("[Door] Grid is not assigned in the Inspector. Please assign it.");
+                return;
+            }
+            Grid grid = _grid;
+            InputManager inputManager = InputManager.Instance;
 
             if (grid != null && inputManager != null)
             {

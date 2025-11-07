@@ -61,7 +61,7 @@ namespace ThiefSimulator.Police
             _movement.OnMovementFinished += HandleMovementFinished;
             if (_grid == null)
             {
-                _grid = FindObjectOfType<Grid>();
+                Debug.LogError("[PoliceOfficerController] Grid is not assigned in the Inspector. Please assign it.");
             }
             if (_grid == null)
             {
@@ -79,7 +79,7 @@ namespace ThiefSimulator.Police
             TryRegisterWithManager();
             if (_playerData == null)
             {
-                _playerData = FindObjectOfType<PlayerData>();
+                Debug.LogError("[PoliceOfficerController] PlayerData is not assigned in the Inspector. Please assign it.");
             }
         }
 
@@ -208,7 +208,7 @@ namespace ThiefSimulator.Police
 #if UNITY_EDITOR
             if (input == null && !Application.isPlaying)
             {
-                input = FindObjectOfType<InputManager>();
+                input = InputManager.Instance;
             }
 #endif
             return input != null ? input.mapOrigin : Vector2Int.zero;
@@ -414,10 +414,7 @@ namespace ThiefSimulator.Police
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            if (_grid == null)
-            {
-                _grid = FindObjectOfType<Grid>();
-            }
+            // _grid should be assigned in the Inspector.
 
             if (!Application.isPlaying)
             {
@@ -432,12 +429,12 @@ namespace ThiefSimulator.Police
         private void OnDrawGizmos()
         {
             if (!_drawPlacementGizmo) { return; }
-            Grid grid = _grid != null ? _grid : FindObjectOfType<Grid>();
-            if (grid == null) { return; }
+            if (_grid == null) { Debug.LogError("[PoliceOfficerController] Grid is not assigned. Cannot get path."); return; }
+            if (_grid == null) { return; }
 
-            Vector3 cellSize = grid.cellSize;
+            Vector3 cellSize = _grid.cellSize;
             Vector3 areaSize = new Vector3(cellSize.x * GetDetectionWidthInTiles(), cellSize.y * GetDetectionWidthInTiles(), 0.05f);
-            Vector3 center = grid.GetCellCenterWorld((Vector3Int)(_baseRelativePosition + ResolveMapOrigin()));
+            Vector3 center = _grid.GetCellCenterWorld((Vector3Int)(_baseRelativePosition + ResolveMapOrigin()));
 
             Gizmos.color = new Color(_gizmoColor.r, _gizmoColor.g, _gizmoColor.b, _gizmoColor.a * 0.5f);
             Gizmos.DrawCube(center, areaSize);

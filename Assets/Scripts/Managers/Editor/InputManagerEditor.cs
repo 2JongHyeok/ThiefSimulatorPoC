@@ -26,7 +26,7 @@ public class InputManagerEditor : Editor
     private void DetectAndSetOrigin(InputManager inputManager)
     {
         // Find the first active Tilemap in the scene.
-        Tilemap tilemap = FindObjectOfType<Tilemap>();
+        Tilemap tilemap = inputManager._obstacleTilemap;
 
         if (tilemap == null)
         {
