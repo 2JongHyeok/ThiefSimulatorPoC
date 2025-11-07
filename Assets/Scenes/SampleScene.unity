@@ -3420,6 +3420,8 @@ MonoBehaviour:
   _patrolRadius: 6
   _obstacleTilemap: {fileID: 60186570}
   _grid: {fileID: 846907547}
+  _drawDetectionArea: 1
+  _gizmoDepthOffset: 9.25
   _patrolIntervalMinutes: 1
 --- !u!114 &1919093537
 MonoBehaviour:
@@ -7295,6 +7297,8 @@ MonoBehaviour:
   _patrolRadius: 6
   _obstacleTilemap: {fileID: 60186570}
   _grid: {fileID: 846907547}
+  _drawDetectionArea: 1
+  _gizmoDepthOffset: 0.1
   _patrolIntervalMinutes: 1
 --- !u!114 &2146395461
 MonoBehaviour:

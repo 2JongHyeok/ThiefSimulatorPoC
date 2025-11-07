@@ -15,6 +15,8 @@ namespace ThiefSimulator.Managers
 
         public event Action<int, int> OnTimeChanged;
 
+        public int TotalMinutes => _totalMinutes;
+
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }

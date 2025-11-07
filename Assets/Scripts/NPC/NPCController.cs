@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using ThiefSimulator.Input;
 using ThiefSimulator.Managers;
 using ThiefSimulator.Pathfinding;
+using ThiefSimulator.Player;
+using ThiefSimulator.Police;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -24,6 +26,14 @@ namespace ThiefSimulator.NPC
         [SerializeField] private Tilemap _obstacleTilemap;
         [SerializeField] private Grid _grid;
 
+        [Header("Detection Overlay")]
+        [SerializeField] private Color _detectionOverlayColor = new Color(1f, 0f, 0f, 0.2f);
+        [SerializeField] private int _detectionOverlaySortingOrder = 3;
+
+        [Header("Detection")]
+        [SerializeField] private PlayerData _playerData;
+        [SerializeField, Tooltip("Half-width of the detection square. 2 => 5x5 area.")] private int _detectionRangeInTiles = 2;
+
         [Header("Patrol Settings")]
         [Tooltip("How many in-game minutes the NPC waits before picking the next patrol point.")]
         [SerializeField] private int _patrolIntervalMinutes = 1;
@@ -35,6 +45,10 @@ namespace ThiefSimulator.NPC
         private Queue<Vector2Int> _currentPath = new Queue<Vector2Int>();
         private Vector2Int _currentPatrolCenter;
         private int _patrolCooldown;
+        [SerializeField, Tooltip("Cached reference to the overlay renderer. Leave empty to auto-create.")] private SpriteRenderer _detectionOverlayRenderer;
+        private static Sprite _sharedDetectionSprite;
+        private int _lastReportedDetectionMinute = -1;
+        private Vector2Int _lastReportedDetectionTile = new Vector2Int(int.MinValue, int.MinValue);
 
         private void Awake()
         {
@@ -43,6 +57,10 @@ namespace ThiefSimulator.NPC
             _npcMovement = GetComponent<NPCMovement>();
             if (_obstacleTilemap == null) { Debug.LogError("[NPCController] Obstacle Tilemap is not assigned!"); }
             if (_grid == null) { Debug.LogError("[NPCController] Grid is not assigned!"); }
+            if (_playerData == null)
+            {
+                _playerData = FindObjectOfType<PlayerData>();
+            }
 
             InitializeTilePosition();
 
@@ -50,12 +68,15 @@ namespace ThiefSimulator.NPC
             {
                 NPCManager.Instance.RegisterNPC(this, _npcData.CurrentTilePosition);
             }
+
+            CreateDetectionOverlay();
         }
 
         private void Start()
         {
             Vector2Int oldPosition = _npcData.CurrentTilePosition;
             InitializeTilePosition();
+            RefreshDetectionOverlay();
             if (NPCManager.Instance != null)
             {
                 NPCManager.Instance.UpdateNPCPosition(this, oldPosition, _npcData.CurrentTilePosition);
@@ -67,6 +88,11 @@ namespace ThiefSimulator.NPC
             if (NPCManager.Instance != null)
             {
                 NPCManager.Instance.UnregisterNPC(this, _npcData.CurrentTilePosition);
+            }
+
+            if (_detectionOverlayRenderer != null && Application.isPlaying)
+            {
+                Destroy(_detectionOverlayRenderer.gameObject);
             }
         }
 
@@ -127,6 +153,8 @@ namespace ThiefSimulator.NPC
         /// </summary>
         public void TickMinute(int currentHour, int currentMinute)
         {
+            TryDetectPlayer();
+
             if (_currentPath.Count > 0)
             {
                 Vector2Int nextTile = _currentPath.Dequeue();
@@ -286,6 +314,160 @@ namespace ThiefSimulator.NPC
 
             Debug.LogWarning($"[NPCController] Failed to find patrol point near {center}. Staying put.");
             return center;
+        }
+
+        private void TryDetectPlayer()
+        {
+            if (_playerData == null)
+            {
+                _playerData = FindObjectOfType<PlayerData>();
+                if (_playerData == null) { return; }
+            }
+
+            if (PoliceManager.Instance == null) { return; }
+            if (TimeManager.Instance == null) { return; }
+
+            Vector2Int npcPos = _npcData.CurrentTilePosition;
+            Vector2Int playerPos = _playerData.CurrentTilePosition;
+
+            if (!IsWithinDetectionRange(npcPos, playerPos)) { return; }
+            if (!HasLineOfSight(npcPos, playerPos)) { return; }
+
+            int currentMinute = TimeManager.Instance.TotalMinutes;
+            if (currentMinute == _lastReportedDetectionMinute && playerPos == _lastReportedDetectionTile) { return; }
+
+            _lastReportedDetectionMinute = currentMinute;
+            _lastReportedDetectionTile = playerPos;
+            PoliceManager.Instance.ReportDetection(playerPos);
+        }
+
+        private bool IsWithinDetectionRange(Vector2Int origin, Vector2Int target)
+        {
+            if (_detectionRangeInTiles <= 0) { return false; }
+            int dx = Mathf.Abs(origin.x - target.x);
+            int dy = Mathf.Abs(origin.y - target.y);
+            return dx <= _detectionRangeInTiles && dy <= _detectionRangeInTiles;
+        }
+
+        private bool HasLineOfSight(Vector2Int origin, Vector2Int target)
+        {
+            if (_obstacleTilemap == null || InputManager.Instance == null) { return true; }
+            Vector2Int mapOrigin = InputManager.Instance.mapOrigin;
+            bool first = true;
+            foreach (Vector2Int tile in EnumerateLine(origin, target))
+            {
+                if (first) { first = false; continue; } // Skip origin tile
+                Vector2Int absolute = tile + mapOrigin;
+                if (_obstacleTilemap.HasTile((Vector3Int)absolute))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private IEnumerable<Vector2Int> EnumerateLine(Vector2Int start, Vector2Int end)
+        {
+            int x0 = start.x;
+            int y0 = start.y;
+            int x1 = end.x;
+            int y1 = end.y;
+            int dx = Mathf.Abs(x1 - x0);
+            int sx = x0 < x1 ? 1 : -1;
+            int dy = -Mathf.Abs(y1 - y0);
+            int sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy;
+
+            while (true)
+            {
+                yield return new Vector2Int(x0, y0);
+                if (x0 == x1 && y0 == y1) { break; }
+                int e2 = 2 * err;
+                if (e2 >= dy)
+                {
+                    err += dy;
+                    x0 += sx;
+                }
+                if (e2 <= dx)
+                {
+                    err += dx;
+                    y0 += sy;
+                }
+            }
+        }
+
+        private void CreateDetectionOverlay()
+        {
+            if (_grid == null) { return; }
+
+            if (_detectionOverlayRenderer == null)
+            {
+                Transform existing = transform.Find("DetectionOverlay");
+                if (existing != null)
+                {
+                    _detectionOverlayRenderer = existing.GetComponent<SpriteRenderer>();
+                }
+            }
+
+            if (_sharedDetectionSprite == null)
+            {
+                Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
+                {
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Point,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                texture.SetPixel(0, 0, Color.white);
+                texture.Apply();
+
+                _sharedDetectionSprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, 1f, 1f),
+                    new Vector2(0.5f, 0.5f));
+                _sharedDetectionSprite.name = "NPCDetectionSquare";
+                _sharedDetectionSprite.hideFlags = HideFlags.HideAndDontSave;
+            }
+
+            if (_detectionOverlayRenderer == null)
+            {
+                GameObject overlay = new GameObject("DetectionOverlay");
+                overlay.transform.SetParent(transform, false);
+                _detectionOverlayRenderer = overlay.AddComponent<SpriteRenderer>();
+            }
+
+            _detectionOverlayRenderer.sprite = _sharedDetectionSprite;
+            _detectionOverlayRenderer.sortingOrder = _detectionOverlaySortingOrder;
+
+            RefreshDetectionOverlay();
+        }
+
+        private int GetDetectionWidthInTiles()
+        {
+            return Mathf.Max(1, (_detectionRangeInTiles * 2) + 1);
+        }
+
+        private void RefreshDetectionOverlay()
+        {
+            if (_detectionOverlayRenderer == null || _grid == null) { return; }
+
+            _detectionOverlayRenderer.color = _detectionOverlayColor;
+            Vector3 cellSize = _grid.cellSize;
+            Vector3 worldScale = new Vector3(
+                cellSize.x * GetDetectionWidthInTiles() * 200,
+                cellSize.y * GetDetectionWidthInTiles() * 200,
+                1f);
+            _detectionOverlayRenderer.transform.localScale = worldScale;
+            _detectionOverlayRenderer.transform.localPosition = Vector3.back * 0.01f;
+        }
+
+        private void OnValidate()
+        {
+            if (_grid == null)
+            {
+                _grid = FindObjectOfType<Grid>();
+            }
+            CreateDetectionOverlay();
+            RefreshDetectionOverlay();
         }
 
         // Usage in Unity:
