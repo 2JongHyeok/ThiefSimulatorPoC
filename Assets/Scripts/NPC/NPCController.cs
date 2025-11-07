@@ -4,6 +4,7 @@ using ThiefSimulator.Managers;
 using ThiefSimulator.Pathfinding;
 using ThiefSimulator.Player;
 using ThiefSimulator.Police;
+using ThiefSimulator.Utilities;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -33,6 +34,7 @@ namespace ThiefSimulator.NPC
         [Header("Detection")]
         [SerializeField] private PlayerData _playerData;
         [SerializeField, Tooltip("Half-width of the detection square. 2 => 5x5 area.")] private int _detectionRangeInTiles = 2;
+        [SerializeField] private Tilemap _hideSpotTilemap;
 
         [Header("Patrol Settings")]
         [Tooltip("How many in-game minutes the NPC waits before picking the next patrol point.")]
@@ -325,6 +327,7 @@ namespace ThiefSimulator.NPC
 
             Vector2Int npcPos = _npcData.CurrentTilePosition;
             Vector2Int playerPos = _playerData.CurrentTilePosition;
+            if (HideSpotUtility.IsPositionHidden(playerPos, _hideSpotTilemap)) { return; }
 
             if (!IsWithinDetectionRange(npcPos, playerPos)) { return; }
             if (!HasLineOfSight(npcPos, playerPos)) { return; }

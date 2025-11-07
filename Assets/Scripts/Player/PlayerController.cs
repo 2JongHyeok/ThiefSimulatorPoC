@@ -21,6 +21,7 @@ namespace ThiefSimulator.Player
         [SerializeField] private Tilemap _floorTilemap;
         [SerializeField] private Tilemap _furnitureTilemap;
         [SerializeField] private Tilemap _doorTilemap;
+        [SerializeField] private Tilemap _hideSpotTilemap;
         [SerializeField] private Tilemap _obstacleTilemap;
         
         private PlayerData _playerData;
@@ -134,7 +135,8 @@ namespace ThiefSimulator.Player
 
             bool isValidTarget = _floorTilemap.HasTile((Vector3Int)absolutePos) ||
                                  (_furnitureTilemap != null && _furnitureTilemap.HasTile((Vector3Int)absolutePos)) ||
-                                 (_doorTilemap != null && _doorTilemap.HasTile((Vector3Int)absolutePos));
+                                 (_doorTilemap != null && _doorTilemap.HasTile((Vector3Int)absolutePos)) ||
+                                 (_hideSpotTilemap != null && _hideSpotTilemap.HasTile((Vector3Int)absolutePos));
 
             if (!isValidTarget && !isDoor) { return; } // Only return if not a door and not a valid tile type.
 
@@ -189,4 +191,3 @@ namespace ThiefSimulator.Player
         }
     }
 }
-

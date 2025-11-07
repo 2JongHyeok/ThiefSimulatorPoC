@@ -3,6 +3,7 @@ using ThiefSimulator.Input;
 using ThiefSimulator.Managers;
 using ThiefSimulator.Pathfinding;
 using ThiefSimulator.Player;
+using ThiefSimulator.Utilities;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -33,6 +34,7 @@ namespace ThiefSimulator.Police
         [SerializeField] private int _hideDelayMinutes = 10;
         [SerializeField] private int _detectionRangeInTiles = 5; // 10x10 area
         [SerializeField] private int _captureRadius = 1;
+        [SerializeField] private Tilemap _hideSpotTilemap;
 
         [Header("Detection Overlay")]
         [SerializeField] private Color _overlayColor = new Color(1f, 0f, 0f, 0.15f);
@@ -382,13 +384,14 @@ namespace ThiefSimulator.Police
 
             Vector2Int playerTile = player.CurrentTilePosition;
             Vector2Int officerTile = _data.CurrentTilePosition;
+            bool playerHidden = HideSpotUtility.IsPositionHidden(playerTile, _hideSpotTilemap);
 
-            if (IsWithinDetectionRange(officerTile, playerTile, _detectionRangeInTiles))
+            if (!playerHidden && IsWithinDetectionRange(officerTile, playerTile, _detectionRangeInTiles))
             {
                 PoliceManager.Instance.ReportDetection(playerTile);
             }
 
-            if (IsWithinDetectionRange(officerTile, playerTile, _captureRadius))
+            if (!playerHidden && IsWithinDetectionRange(officerTile, playerTile, _captureRadius))
             {
                 PoliceManager.Instance.NotifyPlayerCaught(this);
             }
