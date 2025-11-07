@@ -13,10 +13,12 @@ namespace ThiefSimulator.Player
         [Header("Settings")]
         [Tooltip("How many seconds it takes to move one tile.")]
         [SerializeField] private float _secondsPerTile = 0.5f;
-        [SerializeField] private int _moveCostPerTile = 1;
+        [SerializeField] private int _normalMoveCost = 1;
+        [SerializeField] private int _encumberedMoveCost = 2;
 
         [Header("Dependencies")]
         [SerializeField] private Grid _grid;
+        [SerializeField] private PlayerInventory _playerInventory;
 
         public event Action OnMovementFinished;
 
@@ -27,6 +29,10 @@ namespace ThiefSimulator.Player
         {
             _playerData = GetComponent<PlayerData>();
             if (_grid == null) { Debug.LogError("[PlayerMovement] Grid is not assigned in the inspector!"); }
+            if (_playerInventory == null)
+            {
+                _playerInventory = GetComponent<PlayerInventory>();
+            }
         }
 
         public void StartMove(List<Vector2Int> path)
@@ -43,7 +49,9 @@ namespace ThiefSimulator.Player
 
             foreach (var relativeTargetTile in path)
             {
-                TimeManager.Instance.AdvanceTime(_moveCostPerTile);
+                int cost = _playerInventory != null && _playerInventory.IsOverweight ? _encumberedMoveCost : _normalMoveCost;
+                TimeManager.Instance.ResetIdleTimer();
+                TimeManager.Instance.AdvanceTime(cost);
 
                 Vector3 startWorldPos = transform.position;
                 Vector2Int absoluteTargetTile = relativeTargetTile + mapOrigin;

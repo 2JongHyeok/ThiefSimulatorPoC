@@ -12,10 +12,18 @@ namespace ThiefSimulator.Managers
         [SerializeField] private int _startingHour = 8;
 
         private int _totalMinutes;
+        [Header("Idle Auto Advance")]
+        [Tooltip("Real-time seconds that must pass before an idle minute is added automatically.")]
+        [SerializeField] private float _idleAdvanceIntervalSeconds = 5f;
+
+        private float _idleTimer;
 
         public event Action<int, int> OnTimeChanged;
 
         public int TotalMinutes => _totalMinutes;
+        public float IdleAdvanceIntervalSeconds => _idleAdvanceIntervalSeconds;
+        public float IdleTimer => _idleTimer;
+        public float RemainingIdleSeconds => _idleAdvanceIntervalSeconds <= 0f ? -1f : Mathf.Max(0f, _idleAdvanceIntervalSeconds - _idleTimer);
 
         private void Awake()
         {
@@ -29,6 +37,11 @@ namespace ThiefSimulator.Managers
             BroadcastTime();
         }
 
+        private void Update()
+        {
+            HandleIdleAdvance();
+        }
+
         public void AdvanceTime(int minutes)
         {
             if (minutes <= 0) return;
@@ -36,15 +49,24 @@ namespace ThiefSimulator.Managers
             BroadcastTime();
         }
 
-        public void AdvanceTimeGradually(int totalMinutes, float intervalInSeconds, Action onComplete)
+        public void AdvanceTimeGradually(int totalMinutes, float intervalInSeconds, Action onComplete, bool resetIdleEachTick = false)
         {
-            StartCoroutine(AdvanceTimeRoutine(totalMinutes, intervalInSeconds, onComplete));
+            StartCoroutine(AdvanceTimeRoutine(totalMinutes, intervalInSeconds, onComplete, resetIdleEachTick));
         }
 
-        private IEnumerator AdvanceTimeRoutine(int totalMinutes, float intervalInSeconds, Action onComplete)
+        public void ResetIdleTimer()
+        {
+            _idleTimer = 0f;
+        }
+
+        private IEnumerator AdvanceTimeRoutine(int totalMinutes, float intervalInSeconds, Action onComplete, bool resetIdleEachTick)
         {
             for (int i = 0; i < totalMinutes; i++)
             {
+                if (resetIdleEachTick)
+                {
+                    ResetIdleTimer();
+                }
                 AdvanceTime(1);
                 yield return new WaitForSeconds(intervalInSeconds);
             }
@@ -59,11 +81,31 @@ namespace ThiefSimulator.Managers
             OnTimeChanged?.Invoke(currentHour, currentMinute);
         }
 
+        private void HandleIdleAdvance()
+        {
+            if (_idleAdvanceIntervalSeconds <= 0f) { return; }
+
+            _idleTimer += Time.deltaTime;
+            if (_idleTimer < _idleAdvanceIntervalSeconds) { return; }
+
+            int minutesToAdd = Mathf.FloorToInt(_idleTimer / _idleAdvanceIntervalSeconds);
+            _idleTimer -= minutesToAdd * _idleAdvanceIntervalSeconds;
+
+            for (int i = 0; i < minutesToAdd; i++)
+            {
+                AdvanceTime(1);
+            }
+        }
+
         public (int, int) GetCurrentTime()
         {
             int currentHour = (_totalMinutes / 60) % 24;
             int currentMinute = _totalMinutes % 60;
             return (currentHour, currentMinute);
         }
+
+        // Usage in Unity:
+        // 1. Place TimeManager once in the scene and configure the idle interval if needed.
+        // 2. Other systems can call AdvanceTime / AdvanceTimeGradually and ResetIdleTimer when the player acts.
     }
 }

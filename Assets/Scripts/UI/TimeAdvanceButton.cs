@@ -36,6 +36,7 @@ namespace ThiefSimulator.UI
                 return;
             }
 
+            TimeManager.Instance.ResetIdleTimer();
             TimeManager.Instance.AdvanceTime(_minutesPerClick);
         }
     }

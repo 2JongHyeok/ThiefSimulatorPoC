@@ -17,6 +17,9 @@ namespace ThiefSimulator.Input
         [SerializeField] public Tilemap _obstacleTilemap;
 
         public static event Action<Vector2Int> OnTileClicked;
+        public static event Action<Vector2Int> OnDirectionInput;
+        public static event Action OnInteractInput;
+        public static event Action OnInventoryToggle;
 
         private Camera _mainCamera;
 
@@ -35,6 +38,8 @@ namespace ThiefSimulator.Input
             {
                 HandleClick(Mouse.current.position.ReadValue());
             }
+
+            HandleKeyboard();
         }
 
         private void HandleClick(Vector2 screenPosition)
@@ -47,6 +52,39 @@ namespace ThiefSimulator.Input
             Vector2Int relativeGridPosition = absoluteGridPosition - mapOrigin;
 
             OnTileClicked?.Invoke(relativeGridPosition);
+        }
+
+        private void HandleKeyboard()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null) { return; }
+
+            if (keyboard.wKey.wasPressedThisFrame)
+            {
+                OnDirectionInput?.Invoke(Vector2Int.up);
+            }
+            if (keyboard.sKey.wasPressedThisFrame)
+            {
+                OnDirectionInput?.Invoke(Vector2Int.down);
+            }
+            if (keyboard.aKey.wasPressedThisFrame)
+            {
+                OnDirectionInput?.Invoke(Vector2Int.left);
+            }
+            if (keyboard.dKey.wasPressedThisFrame)
+            {
+                OnDirectionInput?.Invoke(Vector2Int.right);
+            }
+
+            if (keyboard.spaceKey.wasPressedThisFrame)
+            {
+                OnInteractInput?.Invoke();
+            }
+
+            if (keyboard.tabKey.wasPressedThisFrame)
+            {
+                OnInventoryToggle?.Invoke();
+            }
         }
 
 #if UNITY_EDITOR

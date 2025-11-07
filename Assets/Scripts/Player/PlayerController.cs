@@ -40,12 +40,16 @@ namespace ThiefSimulator.Player
         private void OnEnable() 
         {
             InputManager.OnTileClicked += HandleTileClick; 
+            InputManager.OnDirectionInput += HandleDirectionInput;
+            InputManager.OnInteractInput += HandleInteractInput;
             _playerMovement.OnMovementFinished += OnActionFinished;
         }
 
         private void OnDisable() 
         {
             InputManager.OnTileClicked -= HandleTileClick; 
+            InputManager.OnDirectionInput -= HandleDirectionInput;
+            InputManager.OnInteractInput -= HandleInteractInput;
             _playerMovement.OnMovementFinished -= OnActionFinished;
         }
 
@@ -66,7 +70,8 @@ namespace ThiefSimulator.Player
                         _currentState = PlayerState.Busy;
                         Debug.Log($"[PlayerController] Opening door at {neighborPos}. Player is now busy.");
                         door.SetOpen(true);
-                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, OnActionFinished);
+                        TimeManager.Instance.ResetIdleTimer();
+                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, OnActionFinished, true);
                         break; 
                     }
                 }
@@ -188,6 +193,31 @@ namespace ThiefSimulator.Player
             }
             
             return relativeTargetPos;
+        }
+
+        private void HandleDirectionInput(Vector2Int direction)
+        {
+            if (_currentState == PlayerState.Busy) { return; }
+            if (direction == Vector2Int.zero) { return; }
+            if (InputManager.Instance == null) { return; }
+
+            Vector2Int targetTile = _playerData.CurrentTilePosition + direction;
+            Vector2Int mapOrigin = InputManager.Instance.mapOrigin;
+            HashSet<Vector2Int> dynamicObstacles = NPCManager.Instance != null ? NPCManager.Instance.GetAllNPCPositions() : null;
+
+            if (!Pathfinder.IsWalkable(targetTile, _obstacleTilemap, mapOrigin, dynamicObstacles))
+            {
+                return;
+            }
+
+            List<Vector2Int> path = new List<Vector2Int> { targetTile };
+            _currentState = PlayerState.Busy;
+            _playerMovement.StartMove(path);
+        }
+
+        private void HandleInteractInput()
+        {
+            Interact();
         }
     }
 }
