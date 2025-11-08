@@ -4,6 +4,7 @@ using ThiefSimulator.Managers;
 using ThiefSimulator.Pathfinding;
 using ThiefSimulator.Player;
 using ThiefSimulator.Police;
+using ThiefSimulator.Objects;
 using ThiefSimulator.Utilities;
 using UnityEngine;
 using UnityEngine.Tilemaps;
@@ -338,6 +339,32 @@ namespace ThiefSimulator.NPC
             _lastReportedDetectionMinute = currentMinute;
             _lastReportedDetectionTile = playerPos;
             PoliceManager.Instance.ReportDetection(playerPos);
+
+            DetectOpenDoors(npcPos);
+        }
+
+        private void DetectOpenDoors(Vector2Int npcPos)
+        {
+            if (DoorManager.Instance == null) { return; }
+            Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : Vector2Int.zero;
+
+            for (int x = -_detectionRangeInTiles; x <= _detectionRangeInTiles; x++)
+            {
+                for (int y = -_detectionRangeInTiles; y <= _detectionRangeInTiles; y++)
+                {
+                    Vector2Int target = npcPos + new Vector2Int(x, y);
+                    if (!IsWithinDetectionRange(npcPos, target)) { continue; }
+
+                    if (DoorManager.Instance.IsDoorAt(target, out Door door) && door.IsOpen)
+                    {
+                        if (HasLineOfSight(npcPos, target))
+                        {
+                            PoliceManager.Instance.ReportDetection(target);
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         private bool IsWithinDetectionRange(Vector2Int origin, Vector2Int target)

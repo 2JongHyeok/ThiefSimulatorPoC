@@ -10,6 +10,7 @@ namespace ThiefSimulator.UI
     public class InventoryItemButton : MonoBehaviour
     {
         [SerializeField] private TextMeshProUGUI _label;
+        [SerializeField] private string _format = "{0} ({1:0.0}kg)";
 
         private ItemData _item;
         private Action<ItemData> _onClicked;
@@ -31,15 +32,28 @@ namespace ThiefSimulator.UI
         {
             _item = item;
             _onClicked = onClicked;
-            if (_label != null)
-            {
-                _label.text = item != null ? item.DisplayName : "(Unknown)";
-            }
+            UpdateLabel();
         }
 
         private void HandleClick()
         {
             _onClicked?.Invoke(_item);
+        }
+
+        private void UpdateLabel()
+        {
+            if (_label == null)
+            {
+                return;
+            }
+
+            if (_item == null)
+            {
+                _label.text = "(Unknown)";
+                return;
+            }
+
+            _label.text = string.Format(_format, _item.DisplayName, _item.Weight);
         }
     }
 }
