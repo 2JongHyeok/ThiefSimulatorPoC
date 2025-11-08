@@ -6854,6 +6854,7 @@ MonoBehaviour:
   _openHighlight: {fileID: 0}
   _closedHighlight: {fileID: 0}
   _originalColor: {r: 1, g: 1, b: 1, a: 1}
+  _toggleCooldownMinutes: 1
 --- !u!212 &583327646
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -9567,6 +9568,7 @@ MonoBehaviour:
   _openHighlight: {fileID: 1037971867}
   _closedHighlight: {fileID: 155537199}
   _originalColor: {r: 1, g: 1, b: 1, a: 1}
+  _toggleCooldownMinutes: 1
 --- !u!212 &1177910458
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -9865,6 +9867,7 @@ MonoBehaviour:
   _openHighlight: {fileID: 1747870954}
   _closedHighlight: {fileID: 724977247}
   _originalColor: {r: 1, g: 1, b: 1, a: 1}
+  _toggleCooldownMinutes: 1
 --- !u!212 &1242467078
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -10424,6 +10427,7 @@ MonoBehaviour:
   _openHighlight: {fileID: 1319600013}
   _closedHighlight: {fileID: 1461805901}
   _originalColor: {r: 1, g: 1, b: 1, a: 1}
+  _toggleCooldownMinutes: 1
 --- !u!212 &1354267032
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -11047,6 +11051,7 @@ MonoBehaviour:
   _openHighlight: {fileID: 0}
   _closedHighlight: {fileID: 0}
   _originalColor: {r: 1, g: 1, b: 1, a: 1}
+  _toggleCooldownMinutes: 1
 --- !u!212 &1522490355
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -12186,8 +12191,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _npcSchedule: {fileID: 11400000, guid: 7a3de4180a4d5724d9f4ab674618795b, type: 2}
-  _patrolRadius: 6
+  _patrolRadius: 4
   _obstacleTilemap: {fileID: 60186570}
+  _furnitureObstacleTilemap: {fileID: 0}
   _grid: {fileID: 846907547}
   _detectionOverlayColor: {r: 1, g: 0, b: 0, a: 0.15}
   _detectionOverlaySortingOrder: 3
@@ -34484,8 +34490,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _npcSchedule: {fileID: 11400000, guid: c0f3b4784e0fbb045ba7918be3c2d44a, type: 2}
-  _patrolRadius: 6
+  _patrolRadius: 4
   _obstacleTilemap: {fileID: 60186570}
+  _furnitureObstacleTilemap: {fileID: 0}
   _grid: {fileID: 846907547}
   _detectionOverlayColor: {r: 1, g: 0, b: 0, a: 0.15}
   _detectionOverlaySortingOrder: 3
