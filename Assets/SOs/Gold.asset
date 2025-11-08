@@ -13,5 +13,5 @@ MonoBehaviour:
   m_Name: Gold
   m_EditorClassIdentifier: 
   _displayName: Gold
-  _weight: 1
+  _weight: 5
   _icon: {fileID: 0}

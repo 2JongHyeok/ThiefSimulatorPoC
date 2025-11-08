@@ -30,6 +30,7 @@ namespace ThiefSimulator.Player
         [Header("UI")]
         [SerializeField] private InventoryUI _inventoryUI;
         [SerializeField] private FurnitureUI _furnitureUI;
+        [SerializeField] private PlayerInventory _playerInventory;
 
         private PlayerData _playerData;
         private PlayerMovement _playerMovement;
@@ -38,12 +39,15 @@ namespace ThiefSimulator.Player
         private FurnitureContainer _currentNearbyFurniture;
         private FurnitureContainer _pendingFurnitureInteraction;
         private FurnitureContainer _activeFurniture;
-        private bool _inventoryClickHooked;
 
         private void Awake()
         {
             _playerData = GetComponent<PlayerData>();
             _playerMovement = GetComponent<PlayerMovement>();
+            if (_playerInventory == null)
+            {
+                _playerInventory = GetComponent<PlayerInventory>();
+            }
             if (_floorTilemap == null || _obstacleTilemap == null)
             {
                 Debug.LogError("[PlayerController] Floor and Obstacle Tilemaps must be assigned!");
@@ -57,6 +61,10 @@ namespace ThiefSimulator.Player
             InputManager.OnInventoryToggle += HandleInventoryToggle;
             InputManager.OnCancelInput += HandleCancelInput;
             _playerMovement.OnMovementFinished += OnActionFinished;
+            if (_inventoryUI != null)
+            {
+                _inventoryUI.OnItemClicked += HandleInventoryItemClicked;
+            }
         }
 
         private void OnDisable()
@@ -66,6 +74,10 @@ namespace ThiefSimulator.Player
             InputManager.OnInventoryToggle -= HandleInventoryToggle;
             InputManager.OnCancelInput -= HandleCancelInput;
             _playerMovement.OnMovementFinished -= OnActionFinished;
+            if (_inventoryUI != null)
+            {
+                _inventoryUI.OnItemClicked -= HandleInventoryItemClicked;
+            }
         }
 
         public void Interact()
@@ -174,7 +186,6 @@ namespace ThiefSimulator.Player
             if (container == null) { return; }
 
             _inventoryUI?.Show();
-            SubscribeInventoryClicks();
             if (_furnitureUI != null)
             {
                 _furnitureUI.Show(container);
@@ -189,7 +200,6 @@ namespace ThiefSimulator.Player
                 _furnitureUI.Hide();
             }
             _activeFurniture = null;
-            UnsubscribeInventoryClicks();
         }
 
         private void HandleInventoryToggle()
@@ -238,7 +248,6 @@ namespace ThiefSimulator.Player
             if (_furnitureInRange.Count == 0)
             {
                 _inventoryUI?.Hide();
-                UnsubscribeInventoryClicks();
             }
         }
 
@@ -296,24 +305,22 @@ namespace ThiefSimulator.Player
             return found;
         }
 
-        private void SubscribeInventoryClicks()
-        {
-            if (_inventoryUI == null || _inventoryClickHooked) { return; }
-            _inventoryUI.OnItemClicked += HandleInventoryItemClicked;
-            _inventoryClickHooked = true;
-        }
-
-        private void UnsubscribeInventoryClicks()
-        {
-            if (_inventoryUI == null || !_inventoryClickHooked) { return; }
-            _inventoryUI.OnItemClicked -= HandleInventoryItemClicked;
-            _inventoryClickHooked = false;
-        }
-
         private void HandleInventoryItemClicked(ItemData item)
         {
-            if (_furnitureUI == null || !_furnitureUI.IsVisible) { return; }
-            _furnitureUI.TryPlaceItemFromInventory(item);
+            if (item == null || _playerInventory == null) { return; }
+
+            if (_furnitureUI != null && _furnitureUI.IsVisible)
+            {
+                if (_furnitureUI.TryPlaceItemFromInventory(item))
+                {
+                    return;
+                }
+            }
+
+            if (_playerInventory.RemoveItem(item))
+            {
+                Debug.Log($"[PlayerController] Dropped {item.DisplayName}.");
+            }
         }
     }
 }
