@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using ThiefSimulator.Input;
 using ThiefSimulator.Items;
 using ThiefSimulator.Player;
 using UnityEngine;
@@ -29,8 +28,6 @@ namespace ThiefSimulator.UI
 
         private void OnEnable()
         {
-            InputManager.OnInventoryToggle += TogglePanel;
-
             if (_playerInventory == null)
             {
                 _playerInventory = FindObjectOfType<PlayerInventory>();
@@ -46,22 +43,31 @@ namespace ThiefSimulator.UI
 
         private void OnDisable()
         {
-            InputManager.OnInventoryToggle -= TogglePanel;
             if (_playerInventory != null)
             {
                 _playerInventory.OnInventoryChanged -= HandleInventoryChanged;
             }
         }
 
-        private void TogglePanel()
+        public bool IsVisible => _panelRoot != null && _panelRoot.activeSelf;
+
+        public void Toggle()
+        {
+            if (IsVisible) { Hide(); }
+            else { Show(); }
+        }
+
+        public void Show()
         {
             if (_panelRoot == null) { return; }
-            bool nextState = !_panelRoot.activeSelf;
-            _panelRoot.SetActive(nextState);
-            if (nextState)
-            {
-                Refresh();
-            }
+            _panelRoot.SetActive(true);
+            Refresh();
+        }
+
+        public void Hide()
+        {
+            if (_panelRoot == null) { return; }
+            _panelRoot.SetActive(false);
         }
 
         private void HandleInventoryChanged(IReadOnlyList<ItemData> items, float _)

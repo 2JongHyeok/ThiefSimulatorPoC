@@ -20,6 +20,7 @@ namespace ThiefSimulator.Input
         public static event Action<Vector2Int> OnDirectionInput;
         public static event Action OnInteractInput;
         public static event Action OnInventoryToggle;
+        public static event Action OnCancelInput;
 
         private Camera _mainCamera;
 
@@ -84,6 +85,11 @@ namespace ThiefSimulator.Input
             if (keyboard.tabKey.wasPressedThisFrame)
             {
                 OnInventoryToggle?.Invoke();
+            }
+
+            if (keyboard.escapeKey.wasPressedThisFrame)
+            {
+                OnCancelInput?.Invoke();
             }
         }
 
