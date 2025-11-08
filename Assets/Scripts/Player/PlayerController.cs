@@ -113,40 +113,6 @@ namespace ThiefSimulator.Player
             TryCompletePendingFurnitureInteraction();
         }
 
-        private Vector2Int FindValidTargetPosition(Vector2Int relativeTargetPos, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles)
-        {
-            if (Pathfinder.IsWalkable(relativeTargetPos, _obstacleTilemap, mapOrigin, dynamicObstacles))
-            {
-                return relativeTargetPos;
-            }
-
-            Vector2Int bestNeighbor = new Vector2Int(-1, -1);
-            float bestDistance = float.MaxValue;
-            Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
-
-            foreach (Vector2Int dir in directions)
-            {
-                Vector2Int relativeNeighborPos = relativeTargetPos + dir;
-
-                if (Pathfinder.IsWalkable(relativeNeighborPos, _obstacleTilemap, mapOrigin, dynamicObstacles))
-                {
-                    float distanceToPlayer = Vector2Int.Distance(_playerData.CurrentTilePosition, relativeNeighborPos);
-                    if (distanceToPlayer < bestDistance)
-                    {
-                        bestDistance = distanceToPlayer;
-                        bestNeighbor = relativeNeighborPos;
-                    }
-                }
-            }
-
-            if (bestNeighbor != new Vector2Int(-1, -1))
-            {
-                return bestNeighbor;
-            }
-
-            return relativeTargetPos;
-        }
-
         private void HandleDirectionInput(Vector2Int direction)
         {
             if (_currentState == PlayerState.Busy) { return; }
@@ -159,7 +125,7 @@ namespace ThiefSimulator.Player
                 ? NPCManager.Instance.GetAllNPCPositions()
                 : null;
 
-            if (!Pathfinder.IsWalkable(targetTile, _obstacleTilemap, mapOrigin, dynamicObstacles))
+            if (!IsTargetTileWalkable(targetTile, mapOrigin, dynamicObstacles))
             {
                 return;
             }
@@ -172,6 +138,28 @@ namespace ThiefSimulator.Player
         private void HandleInteractInput()
         {
             Interact();
+        }
+
+        private bool IsTargetTileWalkable(Vector2Int targetTile, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles)
+        {
+            Vector3Int absolute = (Vector3Int)(targetTile + mapOrigin);
+            bool isFloor = _floorTilemap != null && _floorTilemap.HasTile(absolute);
+            bool isHideSpot = _hideSpotTilemap != null && _hideSpotTilemap.HasTile(absolute);
+            if (!isFloor && !isHideSpot)
+            {
+                return false;
+            }
+
+            Vector3Int absoluteTarget = (Vector3Int)(targetTile + mapOrigin);
+            if (_doorTilemap != null && _doorTilemap.HasTile(absoluteTarget))
+            {
+                if (!DoorManager.Instance.IsDoorAt(targetTile, out Door door) || !door.IsOpen)
+                {
+                    return false;
+                }
+            }
+
+            return Pathfinder.IsWalkable(targetTile, _obstacleTilemap, mapOrigin, dynamicObstacles);
         }
 
         private bool TryOpenNearbyFurniture()
