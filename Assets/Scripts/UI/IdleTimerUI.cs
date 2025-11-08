@@ -1,51 +1,51 @@
-using TMPro;
 using ThiefSimulator.Managers;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ThiefSimulator.UI
 {
-    [RequireComponent(typeof(TextMeshProUGUI))]
     public class IdleTimerUI : MonoBehaviour
     {
         [Header("Display")]
-        [SerializeField] private string _activeFormat = "Auto +1m in {0:0.0}s";
-        [SerializeField] private string _disabledText = "Auto advance disabled";
-        [SerializeField] private string _missingTimeManagerText = "No TimeManager";
-
-        private TextMeshProUGUI _label;
-
-        private void Awake()
-        {
-            _label = GetComponent<TextMeshProUGUI>();
-        }
+        [SerializeField] private Slider _slider;
+        [SerializeField] private GameObject _sliderRoot;
 
         private void Update()
         {
-            if (_label == null)
-            {
-                return;
-            }
-
             if (TimeManager.Instance == null)
             {
-                _label.text = _missingTimeManagerText;
+                SetSliderState(false, 0f);
                 return;
             }
 
             float interval = TimeManager.Instance.IdleAdvanceIntervalSeconds;
             if (interval <= 0f)
             {
-                _label.text = _disabledText;
+                SetSliderState(false, 0f);
                 return;
             }
 
             float remainingSeconds = Mathf.Clamp(TimeManager.Instance.RemainingIdleSeconds, 0f, interval);
-            _label.text = string.Format(_activeFormat, remainingSeconds);
+            float normalized = interval > 0.01f ? remainingSeconds / interval : 0f;
+            SetSliderState(true, normalized);
+        }
+
+        private void SetSliderState(bool active, float value)
+        {
+            if (_sliderRoot != null)
+            {
+                _sliderRoot.SetActive(active);
+            }
+
+            if (_slider != null)
+            {
+                _slider.value = Mathf.Clamp01(value);
+            }
         }
 
         // Usage in Unity:
-        // 1. Add this script to a TextMeshProUGUI object in the HUD.
-        // 2. Optionally tweak the text format strings for your desired UI copy.
-        // 3. Ensure a TimeManager exists in the scene so the label can query the idle countdown.
+        // 1. Create a Slider (0-1 range) and assign it to _slider; optionally assign a parent GameObject to _sliderRoot.
+        // 2. Attach this script to any always-active UI controller.
+        // 3. Slider will fill proportionally to the remaining idle time before auto-advance.
     }
 }
