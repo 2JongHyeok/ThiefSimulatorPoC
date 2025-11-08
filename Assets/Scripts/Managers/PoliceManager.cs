@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using ThiefSimulator.Managers;
 using ThiefSimulator.Player;
+using ThiefSimulator.UI;
 using UnityEngine;
 
 namespace ThiefSimulator.Police
@@ -12,6 +13,7 @@ namespace ThiefSimulator.Police
         public static PoliceManager Instance { get; private set; }
 
         [SerializeField] private PlayerData _playerData;
+        [SerializeField] private GameOverUI _gameOverUI;
 
         private readonly List<PoliceOfficerController> _officers = new();
         private int _lastProcessedMinute = -1;
@@ -94,7 +96,14 @@ namespace ThiefSimulator.Police
         public void NotifyPlayerCaught(PoliceOfficerController officer)
         {
             Debug.LogWarning($"[PoliceManager] Player was caught by {officer.name}. Triggering fail state.");
-            // TODO: Hook up to a dedicated game-over / fail-state manager.
+            if (_gameOverUI != null)
+            {
+                _gameOverUI.Show();
+            }
+            else
+            {
+                Debug.LogWarning("[PoliceManager] GameOverUI is not assigned.");
+            }
         }
 
         private void TrySubscribeToTime()

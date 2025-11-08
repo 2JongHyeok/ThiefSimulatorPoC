@@ -26,6 +26,7 @@ namespace ThiefSimulator.NPC
 
         [Header("Dependencies")]
         [SerializeField] private Tilemap _obstacleTilemap;
+        [SerializeField] private Tilemap _furnitureObstacleTilemap;
         [SerializeField] private Grid _grid;
 
         [Header("Detection Overlay")]
@@ -240,7 +241,10 @@ namespace ThiefSimulator.NPC
                 target,
                 _obstacleTilemap,
                 InputManager.Instance.mapOrigin,
-                NPCManager.Instance.GetAllNPCPositions());
+                NPCManager.Instance.GetAllNPCPositions(),
+                null,
+                false,
+                IsTileWalkableForNPC);
 
             if (path == null)
             {
@@ -309,7 +313,7 @@ namespace ThiefSimulator.NPC
                 randomPoint = center + new Vector2Int(Random.Range(-radius, radius + 1), Random.Range(-radius, radius + 1));
                 attempts++;
 
-                if (Pathfinder.IsWalkable(randomPoint, _obstacleTilemap, InputManager.Instance.mapOrigin, NPCManager.Instance.GetAllNPCPositions()))
+                if (Pathfinder.IsWalkable(randomPoint, _obstacleTilemap, InputManager.Instance.mapOrigin, NPCManager.Instance.GetAllNPCPositions(), null, false, IsTileWalkableForNPC))
                 {
                     return randomPoint;
                 }
@@ -491,6 +495,17 @@ namespace ThiefSimulator.NPC
             // _grid should be assigned in the Inspector.
             CreateDetectionOverlay();
             RefreshDetectionOverlay();
+        }
+
+        private bool IsTileWalkableForNPC(Vector2Int tile)
+        {
+            if (_furnitureObstacleTilemap == null || InputManager.Instance == null)
+            {
+                return true;
+            }
+
+            Vector3Int absolute = (Vector3Int)(tile + InputManager.Instance.mapOrigin);
+            return !_furnitureObstacleTilemap.HasTile(absolute);
         }
 
         // Usage in Unity:

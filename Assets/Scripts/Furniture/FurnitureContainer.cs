@@ -138,14 +138,6 @@ namespace ThiefSimulator.Furniture
             _relativeGridPosition = absolute - mapOrigin;
         }
 
-        private void ApplyRelativePosition()
-        {
-            if (_grid == null) { return; }
-            Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : _editorMapOrigin;
-            Vector2Int absolute = _relativeGridPosition + mapOrigin;
-            transform.position = _grid.GetCellCenterWorld((Vector3Int)absolute);
-        }
-
         private void OnDrawGizmosSelected()
         {
             Grid gridRef = _grid != null ? _grid : GetComponentInParent<Grid>();
@@ -163,6 +155,14 @@ namespace ThiefSimulator.Furniture
             Gizmos.DrawCube(worldCenter, size * 0.95f);
         }
 #endif
+
+        private void ApplyRelativePosition()
+        {
+            if (_grid == null) { return; }
+            Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : _editorMapOrigin;
+            Vector2Int absolute = _relativeGridPosition + mapOrigin;
+            transform.position = _grid.GetCellCenterWorld((Vector3Int)absolute);
+        }
 
         // Usage in Unity:
         // 1. Attach to any furniture GameObject, assign initial items in the Inspector.

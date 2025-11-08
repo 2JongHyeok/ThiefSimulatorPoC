@@ -30,7 +30,7 @@ namespace ThiefSimulator.Police
         [Header("Behavior")]
         [SerializeField] private int _tilesPerMinute = 2;
         [SerializeField] private int _patrolRadius = 10;
-        [SerializeField] private int _patrolDurationMinutes = 60;
+        [SerializeField] private int _patrolDurationMinutes = 30;
         [SerializeField] private int _hideDelayMinutes = 10;
         [SerializeField] private int _detectionRangeInTiles = 5; // 10x10 area
         [SerializeField] private int _captureRadius = 1;
@@ -55,6 +55,7 @@ namespace ThiefSimulator.Police
         [Header("Editor Gizmo")]
         [SerializeField] private bool _drawPlacementGizmo = true;
         [SerializeField] private Color _gizmoColor = new Color(1f, 0f, 0f, 0.3f);
+        private bool _playerSpotted;
 
         private void Awake()
         {
@@ -136,6 +137,7 @@ namespace ThiefSimulator.Police
         {
             _lastDetectionTile = detectionTile;
             _activeUntilMinute = absoluteMinute + _patrolDurationMinutes;
+            _playerSpotted = true;
 
             if (_currentState == PoliceState.Hidden || _currentState == PoliceState.Cooldown)
             {
@@ -151,7 +153,8 @@ namespace ThiefSimulator.Police
 
             BuildPathTo(detectionTile);
             _currentState = PoliceState.Deploying;
-            _pendingStepBudget = 0;
+            _pendingStepBudget = _tilesPerMinute;
+            TryIssueNextStep();
         }
 
         private void InitializeBasePosition()
@@ -175,6 +178,7 @@ namespace ThiefSimulator.Police
         {
             BuildPathTo(_baseRelativePosition);
             _currentState = PoliceState.Returning;
+            _playerSpotted = false;
         }
 
         private void EnterPatrolState()
@@ -188,6 +192,7 @@ namespace ThiefSimulator.Police
             _currentState = PoliceState.Cooldown;
             _cooldownEndMinute = _lastProcessedMinute + _hideDelayMinutes;
             _pendingStepBudget = 0;
+            _playerSpotted = false;
         }
 
         private void HideOfficer()
@@ -197,6 +202,7 @@ namespace ThiefSimulator.Police
             _pendingStepBudget = 0;
             SetVisibility(false);
             InitializeBasePosition();
+            _playerSpotted = false;
         }
 
         private int GetDetectionWidthInTiles()
@@ -288,7 +294,9 @@ namespace ThiefSimulator.Police
                 target,
                 _obstacleTilemap,
                 InputManager.Instance.mapOrigin,
-                null);
+                null,
+                null,
+                true);
 
             if (path == null)
             {
@@ -354,7 +362,7 @@ namespace ThiefSimulator.Police
 
                 if (!IsWithinDetectionRange(_lastDetectionTile, candidate, _patrolRadius)) { continue; }
 
-                if (Pathfinder.IsWalkable(candidate, _obstacleTilemap, InputManager.Instance.mapOrigin, null))
+                if (Pathfinder.IsWalkable(candidate, _obstacleTilemap, InputManager.Instance.mapOrigin, null, null, true))
                 {
                     BuildPathTo(candidate);
                     return;
@@ -385,13 +393,20 @@ namespace ThiefSimulator.Police
             Vector2Int playerTile = player.CurrentTilePosition;
             Vector2Int officerTile = _data.CurrentTilePosition;
             bool playerHidden = HideSpotUtility.IsPositionHidden(playerTile, _hideSpotTilemap);
+            bool hasLOS = HasLineOfSight(officerTile, playerTile);
+            bool playerInDetectionRange = IsWithinDetectionRange(officerTile, playerTile, _detectionRangeInTiles);
 
-            if (!playerHidden && IsWithinDetectionRange(officerTile, playerTile, _detectionRangeInTiles))
+            if (!playerHidden && hasLOS && playerInDetectionRange)
             {
                 PoliceManager.Instance.ReportDetection(playerTile);
             }
 
             if (!playerHidden && IsWithinDetectionRange(officerTile, playerTile, _captureRadius))
+            {
+                PoliceManager.Instance.NotifyPlayerCaught(this);
+            }
+
+            if (playerHidden && hasLOS && playerInDetectionRange && _playerSpotted)
             {
                 PoliceManager.Instance.NotifyPlayerCaught(this);
             }
@@ -402,6 +417,58 @@ namespace ThiefSimulator.Police
             int dx = Mathf.Abs(origin.x - target.x);
             int dy = Mathf.Abs(origin.y - target.y);
             return dx <= range && dy <= range;
+        }
+
+        private bool HasLineOfSight(Vector2Int origin, Vector2Int target)
+        {
+            if (_obstacleTilemap == null || InputManager.Instance == null) { return true; }
+            Vector2Int mapOrigin = InputManager.Instance.mapOrigin;
+            bool first = true;
+            foreach (Vector2Int tile in EnumerateLine(origin, target))
+            {
+                if (first)
+                {
+                    first = false;
+                    continue;
+                }
+
+                Vector2Int absolute = tile + mapOrigin;
+                if (_obstacleTilemap.HasTile((Vector3Int)absolute))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private IEnumerable<Vector2Int> EnumerateLine(Vector2Int start, Vector2Int end)
+        {
+            int x0 = start.x;
+            int y0 = start.y;
+            int x1 = end.x;
+            int y1 = end.y;
+            int dx = Mathf.Abs(x1 - x0);
+            int sx = x0 < x1 ? 1 : -1;
+            int dy = -Mathf.Abs(y1 - y0);
+            int sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy;
+
+            while (true)
+            {
+                yield return new Vector2Int(x0, y0);
+                if (x0 == x1 && y0 == y1) { break; }
+                int e2 = 2 * err;
+                if (e2 >= dy)
+                {
+                    err += dy;
+                    x0 += sx;
+                }
+                if (e2 <= dx)
+                {
+                    err += dx;
+                    y0 += sy;
+                }
+            }
         }
 
         private void TryRegisterWithManager()

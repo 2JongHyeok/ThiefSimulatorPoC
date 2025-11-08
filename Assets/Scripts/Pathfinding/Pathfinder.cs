@@ -19,7 +19,7 @@ namespace ThiefSimulator.Pathfinding
             public Node(Vector2Int position) { this.position = position; }
         }
 
-        public static List<Vector2Int> FindPath(Vector2Int startPosition, Vector2Int targetPosition, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors = null)
+        public static List<Vector2Int> FindPath(Vector2Int startPosition, Vector2Int targetPosition, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors = null, bool allowClosedDoors = false, System.Func<Vector2Int, bool> additionalWalkableCondition = null)
         {
             Node startNode = new Node(startPosition);
             Node targetNode = new Node(targetPosition);
@@ -55,7 +55,7 @@ namespace ThiefSimulator.Pathfinding
                     return RetracePath(startNode, currentNode);
                 }
 
-                foreach (Vector2Int neighborPos in GetNeighborPositions(currentNode, obstacleTilemap, mapOrigin, dynamicObstacles, temporarilyWalkableDoors))
+                foreach (Vector2Int neighborPos in GetNeighborPositions(currentNode, obstacleTilemap, mapOrigin, dynamicObstacles, temporarilyWalkableDoors, allowClosedDoors, additionalWalkableCondition))
                 {
                     if (closedSet.Contains(neighborPos))
                     {
@@ -104,12 +104,17 @@ namespace ThiefSimulator.Pathfinding
             return path;
         }
 
-        public static bool IsWalkable(Vector2Int relativePos, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors = null)
+        public static bool IsWalkable(Vector2Int relativePos, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors = null, bool allowClosedDoors = false, System.Func<Vector2Int, bool> additionalWalkableCondition = null)
         {
             // 1. Check for dynamic obstacles (other NPCs)
             if (dynamicObstacles != null && dynamicObstacles.Contains(relativePos))
             {
                 return false; // Another NPC is here
+            }
+
+            if (additionalWalkableCondition != null && !additionalWalkableCondition(relativePos))
+            {
+                return false;
             }
 
             // 2. Check for static obstacles (walls)
@@ -127,15 +132,15 @@ namespace ThiefSimulator.Pathfinding
                 {
                     return true;
                 }
-                // Otherwise, a door exists here. It's walkable only if it's open.
-                return door.IsOpen;
+                // Otherwise, a door exists here. It's walkable only if it's open, unless override is enabled.
+                return allowClosedDoors || door.IsOpen;
             }
 
             // 4. Not a dynamic obstacle, wall, or closed door, so it's walkable
             return true;
         }
 
-        private static IEnumerable<Vector2Int> GetNeighborPositions(Node node, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors)
+        private static IEnumerable<Vector2Int> GetNeighborPositions(Node node, Tilemap obstacleTilemap, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles, HashSet<Vector2Int> temporarilyWalkableDoors, bool allowClosedDoors, System.Func<Vector2Int, bool> additionalWalkableCondition)
         {
             Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
 
@@ -143,7 +148,7 @@ namespace ThiefSimulator.Pathfinding
             {
                 Vector2Int relativeNeighborPos = node.position + dir;
                 
-                if (IsWalkable(relativeNeighborPos, obstacleTilemap, mapOrigin, dynamicObstacles, temporarilyWalkableDoors))
+                if (IsWalkable(relativeNeighborPos, obstacleTilemap, mapOrigin, dynamicObstacles, temporarilyWalkableDoors, allowClosedDoors, additionalWalkableCondition))
                 {
                     yield return relativeNeighborPos;
                 }

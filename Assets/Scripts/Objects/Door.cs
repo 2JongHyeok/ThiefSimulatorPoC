@@ -21,9 +21,17 @@ namespace ThiefSimulator.Objects
         [SerializeField] private Color _originalColor = Color.white;
 
         private SpriteRenderer _spriteRenderer;
+        private int _lastToggleMinute = -1;
+        [SerializeField, Tooltip("Minimum in-game minutes between toggles.")] private int _toggleCooldownMinutes = 1;
 
         public Vector2Int Position => _position;
         public bool IsOpen => _isOpen;
+        public bool CanToggle()
+        {
+            if (TimeManager.Instance == null) { return true; }
+            if (_lastToggleMinute < 0) { return true; }
+            return TimeManager.Instance.TotalMinutes - _lastToggleMinute >= _toggleCooldownMinutes;
+        }
 
         private void Awake()
         {
@@ -70,6 +78,10 @@ namespace ThiefSimulator.Objects
         {
             if (_isOpen == state) return;
             _isOpen = state;
+            if (TimeManager.Instance != null)
+            {
+                _lastToggleMinute = TimeManager.Instance.TotalMinutes;
+            }
             UpdateVisualState();
             Debug.Log($"[Door] at {Position} state changed to IsOpen: {IsOpen}");
         }

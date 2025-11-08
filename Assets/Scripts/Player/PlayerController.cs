@@ -94,13 +94,16 @@ namespace ThiefSimulator.Player
 
                 if (DoorManager.Instance.IsDoorAt(neighborPos, out Door door))
                 {
-                    if (!door.IsOpen)
+                    if (!door.IsOpen && door.CanToggle())
                     {
                         _currentState = PlayerState.Busy;
                         Debug.Log($"[PlayerController] Opening door at {neighborPos}. Player is now busy.");
-                        door.SetOpen(true);
                         TimeManager.Instance.ResetIdleTimer();
-                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, OnActionFinished, true);
+                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, () =>
+                        {
+                            door.SetOpen(true);
+                            OnActionFinished();
+                        }, true);
                         break;
                     }
                 }
@@ -308,14 +311,16 @@ namespace ThiefSimulator.Player
                 }
             }
 
-            if (_playerInventory.RemoveItem(item))
-            {
-                Debug.Log($"[PlayerController] Dropped {item.DisplayName}.");
-            }
+            // Ignore clicks when no furniture UI is open.
         }
 
         private bool TryToggleNearbyDoor()
         {
+            if (IsPlayerStandingOnDoorTile())
+            {
+                return false;
+            }
+
             Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
 
             foreach (Vector2Int dir in directions)
@@ -325,23 +330,42 @@ namespace ThiefSimulator.Player
                 {
                     if (door.IsOpen)
                     {
-                        door.SetOpen(false);
+                        if (!door.CanToggle()) { continue; }
+                        _currentState = PlayerState.Busy;
                         Debug.Log($"[PlayerController] Closing door at {neighborPos}.");
+                        TimeManager.Instance.ResetIdleTimer();
+                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, () =>
+                        {
+                            door.SetOpen(false);
+                            OnActionFinished();
+                        }, true);
                         return true;
                     }
                     else
                     {
+                        if (!door.CanToggle()) { continue; }
                         _currentState = PlayerState.Busy;
                         Debug.Log($"[PlayerController] Opening door at {neighborPos}. Player is now busy.");
-                        door.SetOpen(true);
                         TimeManager.Instance.ResetIdleTimer();
-                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, OnActionFinished, true);
+                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, () =>
+                        {
+                            door.SetOpen(true);
+                            OnActionFinished();
+                        }, true);
                         return true;
                     }
                 }
             }
 
             return false;
+        }
+
+        private bool IsPlayerStandingOnDoorTile()
+        {
+            if (_doorTilemap == null || InputManager.Instance == null) { return false; }
+            Vector2Int currentTile = _playerData.CurrentTilePosition;
+            Vector3Int absolute = (Vector3Int)(currentTile + InputManager.Instance.mapOrigin);
+            return _doorTilemap.HasTile(absolute);
         }
     }
 }

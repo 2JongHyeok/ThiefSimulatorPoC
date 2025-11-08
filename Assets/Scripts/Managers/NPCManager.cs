@@ -16,6 +16,7 @@ namespace ThiefSimulator.Managers
 
         private List<NPCController> _allNPCs;
         private Dictionary<Vector2Int, NPCController> _npcPositionLookup;
+        private readonly HashSet<Vector2Int> _sharedPositionBuffer = new HashSet<Vector2Int>();
         private int _lastCheckedHour = -1;
         private int _lastProcessedAbsoluteMinute = -1;
         private Coroutine _subscriptionRoutine;
@@ -215,7 +216,12 @@ namespace ThiefSimulator.Managers
         /// </summary>
         public HashSet<Vector2Int> GetAllNPCPositions()
         {
-            return new HashSet<Vector2Int>(_npcPositionLookup.Keys);
+            _sharedPositionBuffer.Clear();
+            foreach (var kvp in _npcPositionLookup)
+            {
+                _sharedPositionBuffer.Add(kvp.Key);
+            }
+            return _sharedPositionBuffer;
         }
 
         /// <summary>
