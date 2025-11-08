@@ -12,10 +12,13 @@ namespace ThiefSimulator.Objects
         [SerializeField] private Vector2Int _position;
         [SerializeField] private bool _isOpen = false;
         [SerializeField] private Grid _grid; // Assign in inspector
+        [SerializeField, Tooltip("Used when InputManager is not available. Matches InputManager.mapOrigin.")]
+        private Vector2Int _editorMapOrigin;
 
         [Header("Visuals")]
-        [SerializeField] private Color _openColor = Color.green;
-        [SerializeField] private Color _closedColor = Color.red;
+        [SerializeField] private GameObject _openHighlight;
+        [SerializeField] private GameObject _closedHighlight;
+        [SerializeField] private Color _originalColor = Color.white;
 
         private SpriteRenderer _spriteRenderer;
 
@@ -26,17 +29,25 @@ namespace ThiefSimulator.Objects
         {
             _spriteRenderer = GetComponent<SpriteRenderer>();
             if (_grid == null) { Debug.LogError("[Door] Grid is not assigned in the inspector!"); }
-            
+
             UpdateVisualState();
         }
 
         private void Start()
         {
             // Position the object at its logical position for consistency.
-            if (_grid != null && InputManager.Instance != null)
+            if (_grid != null)
             {
-                Vector2Int absolutePos = _position + InputManager.Instance.mapOrigin;
-                transform.position = _grid.GetCellCenterWorld((Vector3Int)absolutePos);
+                Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : _editorMapOrigin;
+                Vector3Int currentCell = _grid.WorldToCell(transform.position);
+                Vector2Int absolute = (Vector2Int)currentCell;
+                if (InputManager.Instance != null)
+                {
+                    _position = absolute - mapOrigin;
+                    _editorMapOrigin = mapOrigin;
+                }
+                Vector2Int targetAbsolute = _position + mapOrigin;
+                transform.position = _grid.GetCellCenterWorld((Vector3Int)targetAbsolute);
             }
 
             // Register itself with the manager
@@ -67,29 +78,78 @@ namespace ThiefSimulator.Objects
         {
             if (_spriteRenderer != null)
             {
-                _spriteRenderer.color = _isOpen ? _openColor : _closedColor;
+                _spriteRenderer.color = _originalColor;
+            }
+
+            ApplyHighlightState();
+        }
+
+        private void SetHighlights(bool openActive, bool closedActive)
+        {
+            if (_openHighlight != null)
+            {
+                _openHighlight.SetActive(openActive);
+            }
+            if (_closedHighlight != null)
+            {
+                _closedHighlight.SetActive(closedActive);
             }
         }
 
+        private void ApplyHighlightState()
+        {
+            SetHighlights(_isOpen, !_isOpen);
+        }
+
 #if UNITY_EDITOR
-        private void OnDrawGizmosSelected()
+        private void OnValidate()
         {
             if (_grid == null)
             {
-                Debug.LogError("[Door] Grid is not assigned in the Inspector. Please assign it.");
-                return;
+                _grid = GetComponentInParent<Grid>();
             }
-            Grid grid = _grid;
-            InputManager inputManager = InputManager.Instance;
-
-            if (grid != null && inputManager != null)
+            if (!Application.isPlaying)
             {
-                Vector2Int absolutePos = _position + inputManager.mapOrigin;
-                Vector3 worldPos = grid.GetCellCenterWorld((Vector3Int)absolutePos);
-                
-                Gizmos.color = Color.yellow;
-                Gizmos.DrawWireCube(worldPos, grid.cellSize);
+                if (_grid == null) { return; }
+                if (InputManager.Instance == null && _editorMapOrigin == Vector2Int.zero)
+                {
+                    return;
+                }
             }
+            ApplyRelativePosition();
+        }
+
+        [ContextMenu("Capture Relative Position")]
+        private void CaptureRelativePosition()
+        {
+            if (_grid == null) { return; }
+            Vector3Int cell = _grid.WorldToCell(transform.position);
+            Vector2Int absolute = (Vector2Int)cell;
+            Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : _editorMapOrigin;
+            _position = absolute - mapOrigin;
+        }
+
+        private void ApplyRelativePosition()
+        {
+            if (_grid == null) { return; }
+            Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : _editorMapOrigin;
+            Vector2Int absolute = _position + mapOrigin;
+            transform.position = _grid.GetCellCenterWorld((Vector3Int)absolute);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            Grid grid = _grid != null ? _grid : GetComponentInParent<Grid>();
+            if (grid == null) { return; }
+
+            Vector2Int mapOrigin = InputManager.Instance != null ? InputManager.Instance.mapOrigin : _editorMapOrigin;
+            Vector2Int absolutePos = _position + mapOrigin;
+            Vector3 worldPos = grid.GetCellCenterWorld((Vector3Int)absolutePos);
+
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireCube(worldPos, grid.cellSize);
+            Gizmos.color = new Color(0f, 1f, 1f, 0.25f);
+            Gizmos.DrawCube(worldPos, grid.cellSize * 0.9f);
         }
 #endif
     }

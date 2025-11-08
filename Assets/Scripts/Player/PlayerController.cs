@@ -83,6 +83,7 @@ namespace ThiefSimulator.Player
         public void Interact()
         {
             if (_currentState == PlayerState.Busy) { return; }
+            if (TryToggleNearbyDoor()) { return; }
             if (TryOpenNearbyFurniture()) { return; }
 
             Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
@@ -143,17 +144,19 @@ namespace ThiefSimulator.Player
         private bool IsTargetTileWalkable(Vector2Int targetTile, Vector2Int mapOrigin, HashSet<Vector2Int> dynamicObstacles)
         {
             Vector3Int absolute = (Vector3Int)(targetTile + mapOrigin);
-            bool isFloor = _floorTilemap != null && _floorTilemap.HasTile(absolute);
-            bool isHideSpot = _hideSpotTilemap != null && _hideSpotTilemap.HasTile(absolute);
-            if (!isFloor && !isHideSpot)
-            {
-                return false;
-            }
-
-            Vector3Int absoluteTarget = (Vector3Int)(targetTile + mapOrigin);
-            if (_doorTilemap != null && _doorTilemap.HasTile(absoluteTarget))
+            bool isDoorTile = _doorTilemap != null && _doorTilemap.HasTile(absolute);
+            if (isDoorTile)
             {
                 if (!DoorManager.Instance.IsDoorAt(targetTile, out Door door) || !door.IsOpen)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                bool isFloor = _floorTilemap != null && _floorTilemap.HasTile(absolute);
+                bool isHideSpot = _hideSpotTilemap != null && _hideSpotTilemap.HasTile(absolute);
+                if (!isFloor && !isHideSpot)
                 {
                     return false;
                 }
@@ -309,6 +312,36 @@ namespace ThiefSimulator.Player
             {
                 Debug.Log($"[PlayerController] Dropped {item.DisplayName}.");
             }
+        }
+
+        private bool TryToggleNearbyDoor()
+        {
+            Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+
+            foreach (Vector2Int dir in directions)
+            {
+                Vector2Int neighborPos = _playerData.CurrentTilePosition + dir;
+                if (DoorManager.Instance.IsDoorAt(neighborPos, out Door door))
+                {
+                    if (door.IsOpen)
+                    {
+                        door.SetOpen(false);
+                        Debug.Log($"[PlayerController] Closing door at {neighborPos}.");
+                        return true;
+                    }
+                    else
+                    {
+                        _currentState = PlayerState.Busy;
+                        Debug.Log($"[PlayerController] Opening door at {neighborPos}. Player is now busy.");
+                        door.SetOpen(true);
+                        TimeManager.Instance.ResetIdleTimer();
+                        TimeManager.Instance.AdvanceTimeGradually(_doorOpenCost, _doorOpenInterval, OnActionFinished, true);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }
